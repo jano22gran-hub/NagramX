@@ -347,4 +347,26 @@ public class NekoConfig {
             return keys;
         }
     }
+
+
+    // ================================================================
+    // NagramX Custom Features
+    // ================================================================
+
+    // ── ميزة ١: Screenshot bypass
+    public static ConfigItem allowScreenshots = addConfig("allowScreenshots", false);
+
+    // ── ميزة ٢: Forward bypass
+    public static ConfigItem bypassNoForwards = addConfig("bypassNoForwards", false);
+
+    // ── ميزة ٣: Deleted Messages
+    public static ConfigItem saveDeletedMessages = addConfig("saveDeletedMessages", false);
+
+    // ── ميزة ٥: Local Premium
+    public static ConfigItem localPremium = addConfig("local_premium", false);
+
+    // ── ميزة ٦: Regex Filters
+    public static ConfigItem enableFilters = addConfig("enable_filters", false);
+
+
 }
