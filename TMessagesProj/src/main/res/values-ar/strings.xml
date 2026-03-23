@@ -1243,4 +1243,38 @@
     <string name="RemindTodayAt">\'ذكّرني اليوم عند\' HH:mm</string>
     <string name="RemindDayAt">\'ذكّرني بتاريخ\' d MMM \'عند\' HH:mm</string>
     <string name="RemindDayYearAt">\'ذكّرني بتاريخ\' d MMM yyyy \'عند\' HH:mm</string>
+
+    <!-- NagramX Custom Features -->
+    <string name="AllowScreenshots">السماح بالتقاط الشاشة</string>
+    <string name="AllowScreenshots_desc">إزالة القيد من كل الشاشات</string>
+    <string name="BypassNoForwards">تجاوز قيد التحويل</string>
+    <string name="BypassNoForwards_desc">تحويل الرسائل من القنوات المحمية</string>
+    <string name="SaveDeletedMessages">حفظ الرسائل المحذوفة</string>
+    <string name="SaveDeletedMessages_desc">حفظ الرسائل المحذوفة والمحررة في قاعدة بيانات محلية</string>
+    <string name="GhostMode">وضع الشبح 👻</string>
+    <string name="GhostModeEnabled">وضع الشبح مُفعَّل</string>
+    <string name="GhostModeDisabled">وضع الشبح مُعطَّل</string>
+    <string name="GhostHideOnline">إخفاء حالة الاتصال</string>
+    <string name="GhostHideReading">إخفاء علامة القراءة</string>
+    <string name="GhostHideTyping">إخفاء حالة الكتابة</string>
+    <string name="GhostImmediateOffline">يظهر غير متصل فوراً</string>
+    <string name="GhostNoReadStories">لا تُشاهد القصص تلقائياً</string>
+    <string name="GhostExclusions">استثناءات</string>
+    <string name="GhostInDrawer">زر الشبح في القائمة الجانبية</string>
+    <string name="SendSilence">إرسال بصمت</string>
+    <string name="SendSilenceNever">أبداً</string>
+    <string name="SendSilenceAlways">دائماً</string>
+    <string name="SendSilenceChats">المحادثات فقط</string>
+    <string name="LocalPremium">Premium محلي ⭐</string>
+    <string name="LocalPremium_desc">تفعيل مميزات Premium محلياً</string>
+    <string name="EnableFilters">تفعيل الفلاتر</string>
+    <string name="Filters">فلاتر الرسائل</string>
+    <string name="Filters_desc">إخفاء الرسائل التي تطابق النمط — استخدم regex101.com</string>
+    <string name="AddFilter">إضافة فلتر</string>
+    <string name="DeleteFilter">حذف الفلتر</string>
+    <string name="SessionBackup">نسخ احتياطي للـ Session</string>
+    <string name="SessionBackup_desc">حفظ ملفات الجلسة في مكان تختاره</string>
+    <string name="ImportSession">استيراد جلسة محفوظة</string>
+    <string name="ImportSessionLogin">📥 استيراد جلسة سابقة</string>
+
 </resources>
