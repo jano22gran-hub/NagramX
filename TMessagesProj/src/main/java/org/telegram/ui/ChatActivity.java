@@ -1976,7 +1976,7 @@ public class ChatActivity extends BaseFragment implements
                     return false;
                 }
                 selectedObjectGroup = getValidGroupedMessage(selectedObject = ((ChatMessageCell) view).getMessageObject());
-                var noforwards = getMessagesController().isChatNoForwards(currentChat) || message.messageOwner.noforwards;
+                var noforwards = getMessagesController().isChatNoForwards(currentChat) || message.(!tw.nekomimi.nekogram.helpers.ForwardHelper.canForward(messageOwner)) /* NagramX */;
                 var isAyuDeleted = message.isAyuDeleted();
                 boolean allowChatActions = chatMode != MODE_SCHEDULED && (threadMessageObjects == null || !threadMessageObjects.contains(message)) &&
                         !message.isSponsored() && (getMessageType(message) != MESSAGE_TYPE_SERVICE || message.getDialogId() != mergeDialogId) &&
@@ -3809,7 +3809,7 @@ public class ChatActivity extends BaseFragment implements
             if (selectedView != null && selectedView.getMessageObject() != null && selectedView.getMessageObject().isAyuDeleted()) return false;
             final boolean noforwards = (
                 chatActivity != null && chatActivity.isPeerNoForwards() ||
-                selectedView != null && selectedView.getMessageObject() != null && selectedView.getMessageObject().messageOwner != null && selectedView.getMessageObject().messageOwner.noforwards
+                selectedView != null && selectedView.getMessageObject() != null && selectedView.getMessageObject().messageOwner != null && selectedView.getMessageObject().(!tw.nekomimi.nekogram.helpers.ForwardHelper.canForward(messageOwner)) /* NagramX */
             );
             return !isFactCheck && (
                 chatActivity != null && chatActivity.getCurrentEncryptedChat() == null &&
@@ -3832,7 +3832,7 @@ public class ChatActivity extends BaseFragment implements
             return chatActivity == null || !(selectedView != null && selectedView.getMessageObject() != null && selectedView.getMessageObject().messageOwner != null);
             /*return chatActivity == null || !(
                 chatActivity.getDialogId() < 0 && chatActivity.getMessagesController().isPeerNoForwards(chatActivity.getDialogId()) ||
-                selectedView != null && selectedView.getMessageObject() != null && (selectedView.getMessageObject().messageOwner != null && selectedView.getMessageObject().messageOwner.noforwards)
+                selectedView != null && selectedView.getMessageObject() != null && (selectedView.getMessageObject().messageOwner != null && selectedView.getMessageObject().(!tw.nekomimi.nekogram.helpers.ForwardHelper.canForward(messageOwner)) /* NagramX */)
             );*/
         }
 
@@ -8486,7 +8486,7 @@ public class ChatActivity extends BaseFragment implements
             updateSelectedMessageReactions();
         });*/
         // left button action start
-        boolean noForwards = getMessagesController().isChatNoForwards(currentChat) || currentChat != null && currentChat.noforwards;
+        boolean noForwards = getMessagesController().isChatNoForwards(currentChat) || currentChat != null && tw.nekomimi.nekogram.helpers.ForwardHelper.isChatNoForwards(currentChat) /* NagramX */;
         ChatsHelper chatsHelper = ChatsHelper.getInstance(currentAccount);
         actionsButtonsLayout.setReplyButtonTextAndIcon(ChatsHelper.getLeftButtonText(noForwards), ChatsHelper.getLeftButtonDrawable(noForwards));
         actionsButtonsLayout.setForwardButtonTextAndIcon(LocaleController.getString(R.string.Forward), R.drawable.input_forward, true);
@@ -12652,7 +12652,7 @@ public class ChatActivity extends BaseFragment implements
             for (int i = 0; i < selectedMessagesIds.length; ++i) {
                 for (int j = 0; j < selectedMessagesIds[i].size(); ++j) {
                     MessageObject msg = selectedMessagesIds[i].valueAt(j);
-                    if (msg != null && msg.messageOwner != null && msg.messageOwner.noforwards) {
+                    if (msg != null && msg.messageOwner != null && msg.(!tw.nekomimi.nekogram.helpers.ForwardHelper.canForward(messageOwner)) /* NagramX */) {
                         return true;
                     }
                 }
@@ -13826,7 +13826,7 @@ public class ChatActivity extends BaseFragment implements
     }
 
     private void showTextSelectionHint(MessageObject messageObject) {
-        if (getParentActivity() == null || getMessagesController().isPeerNoForwards(messageObject.getDialogId()) || (messageObject != null && messageObject.messageOwner != null && messageObject.messageOwner.noforwards)) {
+        if (getParentActivity() == null || getMessagesController().isPeerNoForwards(messageObject.getDialogId()) || (messageObject != null && messageObject.messageOwner != null && messageObject.(!tw.nekomimi.nekogram.helpers.ForwardHelper.canForward(messageOwner)) /* NagramX */)) {
             return;
         }
         CharSequence text;
@@ -19555,7 +19555,7 @@ public class ChatActivity extends BaseFragment implements
             if (selectedMessagesIds[index].indexOfKey(messageObject.getId()) >= 0) {
                 selectedMessagesIds[index].remove(messageObject.getId());
                 if (!isReport()) {
-                    if ((messageObject.type == MessageObject.TYPE_TEXT || messageObject.isAnimatedEmoji() || messageObject.caption != null)/* && !(messageObject.messageOwner != null && messageObject.messageOwner.noforwards)*/) {
+                    if ((messageObject.type == MessageObject.TYPE_TEXT || messageObject.isAnimatedEmoji() || messageObject.caption != null)/* && !(messageObject.messageOwner != null && messageObject.(!tw.nekomimi.nekogram.helpers.ForwardHelper.canForward(messageOwner)) /* NagramX */)*/) {
                         selectedMessagesCanCopyIds[index].remove(messageObject.getId());
                     }
                     if (!messageObject.isAnimatedEmoji() && (messageObject.isSticker() || messageObject.isAnimatedSticker()) && MessageObject.isStickerHasSet(messageObject.getDocument())) {
@@ -19592,7 +19592,7 @@ public class ChatActivity extends BaseFragment implements
                 }
                 selectedMessagesIds[index].put(messageObject.getId(), messageObject);
                 if (!isReport()) {
-                    if ((messageObject.type == MessageObject.TYPE_TEXT || messageObject.isAnimatedEmoji() || messageObject.caption != null)/* && !(messageObject.messageOwner != null && messageObject.messageOwner.noforwards)*/) {
+                    if ((messageObject.type == MessageObject.TYPE_TEXT || messageObject.isAnimatedEmoji() || messageObject.caption != null)/* && !(messageObject.messageOwner != null && messageObject.(!tw.nekomimi.nekogram.helpers.ForwardHelper.canForward(messageOwner)) /* NagramX */)*/) {
                         selectedMessagesCanCopyIds[index].put(messageObject.getId(), messageObject);
                     }
                     if (!messageObject.isAnimatedEmoji() && (messageObject.isSticker() || messageObject.isAnimatedSticker()) && MessageObject.isStickerHasSet(messageObject.getDocument())) {
@@ -19926,7 +19926,7 @@ public class ChatActivity extends BaseFragment implements
                                 MessageObject msg = selectedMessagesIds[a].valueAt(i);
                                 if (msg == null) continue;
                                 if (msg.isVoiceOnce() || msg.isRoundOnce()) continue;
-                                if (msg.messageOwner.noforwards) continue;
+                                if (msg.(!tw.nekomimi.nekogram.helpers.ForwardHelper.canForward(messageOwner)) /* NagramX */) continue;
                                 if (msg.isVoice() || msg.isRoundVideo())
                                     show = true;
                             }
@@ -30179,6 +30179,8 @@ public class ChatActivity extends BaseFragment implements
     @Override
     public void onResume() {
         super.onResume();
+        // NagramX Screenshot
+        tw.nekomimi.nekogram.helpers.ScreenshotHelper.apply(getParentActivity());
         cachedIsGestureNavigation = AndroidUtil.isGestureNavigation(getContext());
         checkShowBlur(false);
         activityResumeTime = System.currentTimeMillis();
@@ -31229,7 +31231,7 @@ public class ChatActivity extends BaseFragment implements
             allowPin = false;
         }
         allowPin = allowPin && message.getId() > 0 && (message.messageOwner.action == null || message.messageOwner.action instanceof TLRPC.TL_messageActionEmpty) && !message.isExpiredStory() && message.type != MessageObject.TYPE_STORY_MENTION;
-        boolean noforwards = isPeerNoForwards() || message.messageOwner.noforwards || getDialogId() == UserObject.VERIFY;
+        boolean noforwards = isPeerNoForwards() || message.(!tw.nekomimi.nekogram.helpers.ForwardHelper.canForward(messageOwner)) /* NagramX */ || getDialogId() == UserObject.VERIFY;
         boolean noforwardsOverride = false;
         boolean noforwardsOrPaidMedia = noforwardsOverride || message.type == MessageObject.TYPE_PAID_MEDIA;
         boolean allowUnpin = message.getDialogId() != mergeDialogId && allowPin && (pinnedMessageObjects.containsKey(message.getId()) || groupedMessages != null && !groupedMessages.messages.isEmpty() && pinnedMessageObjects.containsKey(groupedMessages.messages.get(0).getId())) && !message.isExpiredStory();
@@ -32498,7 +32500,7 @@ public class ChatActivity extends BaseFragment implements
                     }
                 }
 
-                boolean showNoForwards = (isPeerNoForwards() || message.messageOwner.noforwards && currentUser != null && currentUser.bot) && message.messageOwner.action == null && message.isSent() && !message.isEditing() && chatMode != MODE_SCHEDULED && chatMode != MODE_SAVED && getDialogId() != UserObject.VERIFY;
+                boolean showNoForwards = (isPeerNoForwards() || message.(!tw.nekomimi.nekogram.helpers.ForwardHelper.canForward(messageOwner)) /* NagramX */ && currentUser != null && currentUser.bot) && message.messageOwner.action == null && message.isSent() && !message.isEditing() && chatMode != MODE_SCHEDULED && chatMode != MODE_SAVED && getDialogId() != UserObject.VERIFY;
                 scrimPopupContainerLayout.addView(popupLayout, LayoutHelper.createLinearRelatively(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT, isReactionsAvailable ? 16 : 0, 0, isReactionsAvailable ? 36 : 0, 0));
                 scrimPopupContainerLayout.setPopupWindowLayout(popupLayout);
                 if (showNoForwards) {
@@ -34031,7 +34033,7 @@ public class ChatActivity extends BaseFragment implements
                 break;
             }
             case OPTION_REPLY: {
-                if (selectedObject != null && selectedObject.messageOwner != null && selectedObject.messageOwner.noforwards) {
+                if (selectedObject != null && selectedObject.messageOwner != null && selectedObject.(!tw.nekomimi.nekogram.helpers.ForwardHelper.canForward(messageOwner)) /* NagramX */) {
                     return;
                 }
                 if (selectedObject != null && currentChat != null && (ChatObject.isNotInChat(currentChat) && !ChatObject.isMonoForum(currentChat) && !isThreadChat() || ChatObject.isChannel(currentChat) && !ChatObject.canPost(currentChat) && !currentChat.megagroup || !ChatObject.canSendMessages(currentChat))) {
@@ -36579,7 +36581,7 @@ public class ChatActivity extends BaseFragment implements
                     builder.setTitleMultipleLines(true);
                 }
                 final int finalTimestamp = timestamp;
-                // boolean noforwards = isPeerNoForwards() || (messageObject != null && messageObject.messageOwner != null && messageObject.messageOwner.noforwards);
+                // boolean noforwards = isPeerNoForwards() || (messageObject != null && messageObject.messageOwner != null && messageObject.(!tw.nekomimi.nekogram.helpers.ForwardHelper.canForward(messageOwner)) /* NagramX */);
                 CharSequence[] items = new CharSequence[]{
                         LocaleController.getString(R.string.Open),
                         LocaleController.getString(R.string.Copy),
@@ -36898,7 +36900,7 @@ public class ChatActivity extends BaseFragment implements
         if (url == null || getParentActivity() == null) {
             return;
         }
-        boolean noforwards = isPeerNoForwards() || (messageObject != null && messageObject.messageOwner != null && messageObject.messageOwner.noforwards);
+        boolean noforwards = isPeerNoForwards() || (messageObject != null && messageObject.messageOwner != null && messageObject.(!tw.nekomimi.nekogram.helpers.ForwardHelper.canForward(messageOwner)) /* NagramX */);
         boolean noforwardsOverride = false;
         if (url instanceof URLSpanMono) {
             if (!noforwardsOverride || getDialogId() == UserObject.VERIFY) {
@@ -41282,7 +41284,7 @@ public class ChatActivity extends BaseFragment implements
                     msg.ttl_period = omsg.ttl_period;
                     msg.quick_reply_shortcut_id = omsg.quick_reply_shortcut_id;
                     msg.effect = omsg.effect;
-                    msg.noforwards = omsg.noforwards;
+                    (!tw.nekomimi.nekogram.helpers.ForwardHelper.canForward(msg)) /* NagramX */ = (!tw.nekomimi.nekogram.helpers.ForwardHelper.canForward(omsg)) /* NagramX */;
                     msg.invert_media = omsg.invert_media;
                     msg.offline = omsg.offline;
                     msg.factcheck = omsg.factcheck;
@@ -41322,7 +41324,7 @@ public class ChatActivity extends BaseFragment implements
                     msg.replyStory = omsg.replyStory;
                     msg.media = emedia.media;
                     msg.quick_reply_shortcut = omsg.quick_reply_shortcut;
-                    msg.noforwards = true;
+                    (!tw.nekomimi.nekogram.helpers.ForwardHelper.canForward(msg)) /* NagramX */ = true;
                     MessageObject msgObj = new MessageObject(message.currentAccount, msg, false, true);
                     messages.add(msgObj);
                 }
@@ -46326,7 +46328,7 @@ public class ChatActivity extends BaseFragment implements
             allowPin = false;
         }
         allowPin = allowPin && message.getId() > 0 && (message.messageOwner.action == null || message.messageOwner.action instanceof TLRPC.TL_messageActionEmpty) && !message.isExpiredStory() && message.type != MessageObject.TYPE_STORY_MENTION;
-        boolean noforwards = isPeerNoForwards() || message.messageOwner.noforwards || getDialogId() == UserObject.VERIFY;
+        boolean noforwards = isPeerNoForwards() || message.(!tw.nekomimi.nekogram.helpers.ForwardHelper.canForward(messageOwner)) /* NagramX */ || getDialogId() == UserObject.VERIFY;
         boolean noforwardsOverride = false;
         boolean noforwardsOrPaidMedia = noforwardsOverride || message.type == MessageObject.TYPE_PAID_MEDIA;
         boolean allowUnpin = message.getDialogId() != mergeDialogId && allowPin && (pinnedMessageObjects.containsKey(message.getId()) || groupedMessages != null && !groupedMessages.messages.isEmpty() && pinnedMessageObjects.containsKey(groupedMessages.messages.get(0).getId())) && !message.isExpiredStory();
