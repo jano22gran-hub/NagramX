@@ -13542,6 +13542,10 @@ public class MessagesStorage extends BaseController {
                         if (NaConfig.INSTANCE.getEnableSaveDeletedMessages().Bool()) {
                             final long dialogIdFinal = dialogId;
                             final ArrayList<Integer> midsFinal = new ArrayList<>(mids);
+                            // NagramX: save before delete
+                            if (tw.nekomimi.nekogram.NekoConfig.saveDeletedMessages.Bool()) {
+                                tw.nekomimi.nekogram.helpers.deletedmessages.DeletedMessagesManager.onMessagesDeleted(dialogId, mids, null);
+                            }
                             AndroidUtilities.runOnUIThread(() -> getNotificationCenter().postNotificationName(AyuConstants.MESSAGES_DELETED_NOTIFICATION, dialogIdFinal, midsFinal));
                         }
                         AndroidUtilities.runOnUIThread(() -> getNotificationCenter().postNotificationName(NotificationCenter.messagesDeleted, mids, 0L, false));
