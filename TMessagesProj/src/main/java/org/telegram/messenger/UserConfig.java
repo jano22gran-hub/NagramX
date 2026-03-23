@@ -570,10 +570,12 @@ public class UserConfig extends BaseController {
     }
 
     public boolean isPremium() {
+        // NagramX: Local Premium override
+        if (tw.nekomimi.nekogram.helpers.LocalPremiumHelper.isLocalPremiumEnabled()) return true;
         TLRPC.User user = currentUser;
         if (user == null) {
             return false;
-        }
+    }
         return user.premium;
     }
 
