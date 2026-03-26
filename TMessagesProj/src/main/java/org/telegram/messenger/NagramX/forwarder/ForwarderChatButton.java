@@ -1,6 +1,7 @@
 package org.telegram.messenger.NagramX.forwarder;
 
 import android.content.Context;
+import android.os.SystemClock;
 import android.widget.Toast;
 
 import org.telegram.messenger.AndroidUtilities;
@@ -9,69 +10,43 @@ import org.telegram.messenger.UserConfig;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
+import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.DialogsActivity;
 
 import java.util.ArrayList;
 
-/**
- * ForwarderChatButton — زر التحويل في الدردشة
- *
- * الإصلاحات المطبقة:
- * ✅ Singleton hashDb — بدل new ForwarderHashDatabase() كل مرة
- * ✅ static buildConfig — بدل إنشاء ForwarderSettingsActivity instance
- * ✅ cleanup في كل مسارات الخروج
- */
 public class ForwarderChatButton {
 
-    // ==========================================
-    // startForwardFlow — نقطة الدخول
-    // ==========================================
     public static void startForwardFlow(BaseFragment fragment, long sourceDialogId) {
         if (fragment == null || fragment.getParentActivity() == null) return;
         openChatSelection(fragment, sourceDialogId);
     }
 
-    // ==========================================
-    // openChatSelection
-    // ==========================================
     private static void openChatSelection(BaseFragment fragment, long sourceId) {
         android.os.Bundle args = new android.os.Bundle();
         args.putBoolean("onlySelect", true);
         args.putInt("dialogsType", 0);
         args.putBoolean("allowGlobalSearch", true);
 
-        DialogsActivity dialogsActivity = new DialogsActivity(args);
-        dialogsActivity.setDelegate((parentFragment, dids, message, param, notify, scheduleDate, scheduleRepeatPeriod, topicsFragment) -> {
+        DialogsActivity da = new DialogsActivity(args);
+        da.setDelegate((parentFragment, dids, message, param, notify, scheduleDate, scheduleRepeatPeriod, topicsFragment) -> {
             if (dids == null || dids.isEmpty()) return false;
-
             long targetId = dids.get(0).dialogId;
-
             if (sourceId == targetId) {
-                Toast.makeText(fragment.getParentActivity(),
-                    "لا يمكن التحويل إلى نفس الدردشة", Toast.LENGTH_SHORT).show();
+                Toast.makeText(fragment.getParentActivity(), "لا يمكن التحويل إلى نفس الدردشة", Toast.LENGTH_SHORT).show();
                 return false;
             }
-
             parentFragment.finishFragment();
-
-            AndroidUtilities.runOnUIThread(() ->
-                showConfirmDialog(fragment, sourceId, targetId)
-            );
+            AndroidUtilities.runOnUIThread(() -> showConfirmDialog(fragment, sourceId, targetId));
             return true;
         });
-
-        fragment.presentFragment(dialogsActivity);
+        fragment.presentFragment(da);
     }
 
-    // ==========================================
-    // showConfirmDialog
-    // ==========================================
     private static void showConfirmDialog(BaseFragment fragment, long sourceId, long targetId) {
         Context ctx = fragment.getParentActivity();
         if (ctx == null) return;
-
         MessagesController mc = MessagesController.getInstance(UserConfig.selectedAccount);
-
         final long[] ids = {sourceId, targetId};
 
         android.content.SharedPreferences prefs = ctx.getSharedPreferences(
@@ -82,190 +57,170 @@ public class ForwarderChatButton {
         int pad = AndroidUtilities.dp(16);
         layout.setPadding(pad, pad, pad, pad);
 
-        // --- معلومات المصدر ---
-        android.widget.TextView srcLabel = new android.widget.TextView(ctx);
-        srcLabel.setTextSize(12);
-        srcLabel.setTextColor(org.telegram.ui.ActionBar.Theme.getColor(
-            org.telegram.ui.ActionBar.Theme.key_windowBackgroundWhiteGrayText));
-        srcLabel.setText("المصدر");
-        layout.addView(srcLabel);
+        // المصدر
+        addInfoRow(layout, ctx, "المصدر", "📥  " + getChatName(mc, ids[0]));
+        android.widget.TextView btnSrc = addLink(layout, ctx, "🔄 تغيير المصدر");
 
-        android.widget.TextView srcName = new android.widget.TextView(ctx);
-        srcName.setTextSize(15);
-        srcName.setTextColor(org.telegram.ui.ActionBar.Theme.getColor(
-            org.telegram.ui.ActionBar.Theme.key_windowBackgroundWhiteBlackText));
-        srcName.setText("📥  " + getChatName(mc, ids[0]));
-        android.widget.LinearLayout.LayoutParams srcP =
-            new android.widget.LinearLayout.LayoutParams(-1, -2);
-        srcP.bottomMargin = AndroidUtilities.dp(8);
-        layout.addView(srcName, srcP);
+        // الهدف
+        addInfoRow(layout, ctx, "الهدف", "📤  " + getChatName(mc, ids[1]));
+        android.widget.TextView btnTgt = addLink(layout, ctx, "🔄 تغيير الهدف");
 
-        // زر تغيير المصدر
-        android.widget.TextView btnChangeSrc = new android.widget.TextView(ctx);
-        btnChangeSrc.setText("🔄 تغيير المصدر");
-        btnChangeSrc.setTextSize(13);
-        btnChangeSrc.setTextColor(org.telegram.ui.ActionBar.Theme.getColor(
-            org.telegram.ui.ActionBar.Theme.key_windowBackgroundWhiteBlueText));
-        btnChangeSrc.setPadding(0, 0, 0, AndroidUtilities.dp(12));
-        layout.addView(btnChangeSrc);
-
-        // --- معلومات الهدف ---
-        android.widget.TextView tgtLabel = new android.widget.TextView(ctx);
-        tgtLabel.setTextSize(12);
-        tgtLabel.setTextColor(org.telegram.ui.ActionBar.Theme.getColor(
-            org.telegram.ui.ActionBar.Theme.key_windowBackgroundWhiteGrayText));
-        tgtLabel.setText("الهدف");
-        layout.addView(tgtLabel);
-
-        android.widget.TextView tgtName = new android.widget.TextView(ctx);
-        tgtName.setTextSize(15);
-        tgtName.setTextColor(org.telegram.ui.ActionBar.Theme.getColor(
-            org.telegram.ui.ActionBar.Theme.key_windowBackgroundWhiteBlackText));
-        tgtName.setText("📤  " + getChatName(mc, ids[1]));
-        android.widget.LinearLayout.LayoutParams tgtP =
-            new android.widget.LinearLayout.LayoutParams(-1, -2);
-        tgtP.bottomMargin = AndroidUtilities.dp(8);
-        layout.addView(tgtName, tgtP);
-
-        // زر تغيير الهدف
-        android.widget.TextView btnChangeTgt = new android.widget.TextView(ctx);
-        btnChangeTgt.setText("🔄 تغيير الهدف");
-        btnChangeTgt.setTextSize(13);
-        btnChangeTgt.setTextColor(org.telegram.ui.ActionBar.Theme.getColor(
-            org.telegram.ui.ActionBar.Theme.key_windowBackgroundWhiteBlueText));
-        btnChangeTgt.setPadding(0, 0, 0, AndroidUtilities.dp(12));
-        layout.addView(btnChangeTgt);
-
-        // --- ملخص الإعدادات ---
-        android.widget.TextView settingsSummary = new android.widget.TextView(ctx);
-        int chunk   = prefs.getInt(ForwarderSettingsActivity.PREF_CHUNK_SIZE, 50);
+        // ملخص
+        int chunk = prefs.getInt(ForwarderSettingsActivity.PREF_CHUNK_SIZE, 50);
         float delay = prefs.getFloat(ForwarderSettingsActivity.PREF_DELAY_SECONDS, 3f);
         boolean dup = prefs.getBoolean(ForwarderSettingsActivity.PREF_SKIP_DUPLICATES, true);
-        boolean reverse = prefs.getBoolean(ForwarderSettingsActivity.PREF_REVERSE_ORDER, false);
-        settingsSummary.setText(
-            "📦 دفعة: " + chunk + "  •  ⏱ تأخير: " + delay + "s  •  🔐 تكرار: " + (dup ? "✓" : "✗") +
-            (reverse ? "  •  🔄 عكسي" : ""));
-        settingsSummary.setTextSize(12);
-        settingsSummary.setTextColor(org.telegram.ui.ActionBar.Theme.getColor(
-            org.telegram.ui.ActionBar.Theme.key_windowBackgroundWhiteGrayText));
-        layout.addView(settingsSummary);
+        boolean lb = prefs.getBoolean(ForwarderSettingsActivity.PREF_LARGE_BATCH, false);
+        boolean rev = prefs.getBoolean(ForwarderSettingsActivity.PREF_REVERSE_ORDER, false);
+
+        String summary = "📦 دفعة: " + chunk + "  •  ⏱ " + delay + "s  •  🔐 " + (dup ? "✓" : "✗");
+        if (lb) {
+            int lbs = prefs.getInt(ForwarderSettingsActivity.PREF_LARGE_BATCH_SIZE, 2000);
+            float lbd = prefs.getFloat(ForwarderSettingsActivity.PREF_LARGE_BATCH_DELAY, 60f);
+            summary += "\n📦 وجبة كبيرة: " + lbs + " رسالة / " + (int)lbd + "s";
+        }
+        if (rev) summary += "  •  🔄 عكسي";
+
+        android.widget.TextView tvSum = new android.widget.TextView(ctx);
+        tvSum.setText(summary);
+        tvSum.setTextSize(12);
+        tvSum.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
+        android.widget.LinearLayout.LayoutParams sp = new android.widget.LinearLayout.LayoutParams(-1, -2);
+        sp.topMargin = AndroidUtilities.dp(12);
+        layout.addView(tvSum, sp);
 
         AlertDialog.Builder builder = new AlertDialog.Builder(ctx);
         builder.setTitle("🔄 تحويل التاريخ");
         builder.setView(layout);
 
         final AlertDialog[] dlg = {null};
-
-        builder.setPositiveButton("🚀 ابدأ التحويل", (dialog, which) -> {
-            dialog.dismiss();
-            startEngine(fragment, ids[0], ids[1], ctx);
-        });
-
-        builder.setNeutralButton("⚙️ الإعدادات", (dialog, which) -> {
-            dialog.dismiss();
-            fragment.presentFragment(new ForwarderSettingsActivity());
-        });
-
+        builder.setPositiveButton("🚀 ابدأ", (d, w) -> { d.dismiss(); startEngine(fragment, ids[0], ids[1], ctx); });
+        builder.setNeutralButton("⚙️ الإعدادات", (d, w) -> { d.dismiss(); fragment.presentFragment(new ForwarderSettingsActivity()); });
         builder.setNegativeButton("إلغاء", null);
         dlg[0] = builder.show();
 
-        // تغيير المصدر
-        btnChangeSrc.setOnClickListener(v -> {
-            if (dlg[0] != null) dlg[0].dismiss();
-            android.os.Bundle args = new android.os.Bundle();
-            args.putBoolean("onlySelect", true);
-            args.putInt("dialogsType", 0);
-            DialogsActivity da = new DialogsActivity(args);
-            da.setDelegate((pf, dids, msg, param, notify, sd, srp, tf) -> {
-                if (dids == null || dids.isEmpty()) return false;
-                ids[0] = dids.get(0).dialogId;
-                pf.finishFragment();
-                AndroidUtilities.runOnUIThread(() -> showConfirmDialog(fragment, ids[0], ids[1]));
-                return true;
-            });
-            fragment.presentFragment(da);
-        });
+        btnSrc.setOnClickListener(v -> { if (dlg[0] != null) dlg[0].dismiss(); changeChat(fragment, ids, 0); });
+        btnTgt.setOnClickListener(v -> { if (dlg[0] != null) dlg[0].dismiss(); changeChat(fragment, ids, 1); });
+    }
 
-        // تغيير الهدف
-        btnChangeTgt.setOnClickListener(v -> {
-            if (dlg[0] != null) dlg[0].dismiss();
-            android.os.Bundle args = new android.os.Bundle();
-            args.putBoolean("onlySelect", true);
-            args.putInt("dialogsType", 0);
-            DialogsActivity da = new DialogsActivity(args);
-            da.setDelegate((pf, dids, msg, param, notify, sd, srp, tf) -> {
-                if (dids == null || dids.isEmpty()) return false;
-                ids[1] = dids.get(0).dialogId;
-                if (ids[0] == ids[1]) {
-                    android.widget.Toast.makeText(ctx,
-                        "المصدر والهدف لا يمكن أن يكونا نفس الدردشة",
-                        android.widget.Toast.LENGTH_SHORT).show();
-                    return false;
-                }
-                pf.finishFragment();
-                AndroidUtilities.runOnUIThread(() -> showConfirmDialog(fragment, ids[0], ids[1]));
-                return true;
-            });
-            fragment.presentFragment(da);
+    private static void changeChat(BaseFragment fragment, long[] ids, int index) {
+        android.os.Bundle args = new android.os.Bundle();
+        args.putBoolean("onlySelect", true);
+        args.putInt("dialogsType", 0);
+        DialogsActivity da = new DialogsActivity(args);
+        da.setDelegate((pf, dids, msg, param, notify, sd, srp, tf) -> {
+            if (dids == null || dids.isEmpty()) return false;
+            ids[index] = dids.get(0).dialogId;
+            if (ids[0] == ids[1]) {
+                Toast.makeText(fragment.getParentActivity(), "المصدر والهدف لا يمكن أن يكونا نفس الدردشة", Toast.LENGTH_SHORT).show();
+                return false;
+            }
+            pf.finishFragment();
+            AndroidUtilities.runOnUIThread(() -> showConfirmDialog(fragment, ids[0], ids[1]));
+            return true;
         });
+        fragment.presentFragment(da);
     }
 
     // ==========================================
-    // startEngine — تشغيل ForwarderEngine
-    // ✅ إصلاح: Singleton hashDb + static buildConfig
+    // startEngine — مع progress محسّن
     // ==========================================
     private static void startEngine(BaseFragment fragment, long sourceId, long targetId, Context ctx) {
-        // ✅ Singleton بدل new
         ForwarderHashDatabase hashDb = ForwarderHashDatabase.getInstance();
         ForwarderEngine engine = new ForwarderEngine(hashDb);
-
-        // ✅ static buildConfig — بدون إنشاء Fragment
         ForwarderEngine.ForwardConfig config = ForwarderSettingsActivity.buildConfig(ctx, sourceId, targetId);
 
-        // Progress dialog
-        AlertDialog[] progressDialog = {null};
+        // بناء Progress Dialog محسّن
         android.widget.LinearLayout layout = new android.widget.LinearLayout(ctx);
         layout.setOrientation(android.widget.LinearLayout.VERTICAL);
         int pad = AndroidUtilities.dp(20);
         layout.setPadding(pad, pad, pad, pad);
 
-        android.widget.TextView statusTv = new android.widget.TextView(ctx);
-        statusTv.setText("جاري التحضير...");
-        statusTv.setTextSize(15);
-        layout.addView(statusTv);
+        // حالة
+        android.widget.TextView tvStatus = new android.widget.TextView(ctx);
+        tvStatus.setText("جاري التحضير...");
+        tvStatus.setTextSize(15);
+        tvStatus.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
+        layout.addView(tvStatus);
 
-        android.widget.ProgressBar progressBar = new android.widget.ProgressBar(ctx,
-            null, android.R.attr.progressBarStyleHorizontal);
-        android.widget.LinearLayout.LayoutParams pbParams =
-            new android.widget.LinearLayout.LayoutParams(-1, -2);
-        pbParams.topMargin = AndroidUtilities.dp(12);
-        layout.addView(progressBar, pbParams);
+        // شريط تقدم
+        android.widget.ProgressBar bar = new android.widget.ProgressBar(ctx, null, android.R.attr.progressBarStyleHorizontal);
+        android.widget.LinearLayout.LayoutParams bp = new android.widget.LinearLayout.LayoutParams(-1, -2);
+        bp.topMargin = AndroidUtilities.dp(12);
+        layout.addView(bar, bp);
 
-        AlertDialog.Builder pBuilder = new AlertDialog.Builder(ctx);
-        pBuilder.setTitle("🔄 تحويل الرسائل");
-        pBuilder.setView(layout);
+        // نسبة + ETA
+        android.widget.TextView tvPercent = new android.widget.TextView(ctx);
+        tvPercent.setText("0%");
+        tvPercent.setTextSize(13);
+        tvPercent.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
+        android.widget.LinearLayout.LayoutParams pp = new android.widget.LinearLayout.LayoutParams(-1, -2);
+        pp.topMargin = AndroidUtilities.dp(6);
+        layout.addView(tvPercent, pp);
 
-        pBuilder.setPositiveButton("توقف مؤقت", (d, w) -> {
-            if (engine.isRunning()) engine.pause();
+        // تفاصيل (مكرر + سرعة)
+        android.widget.TextView tvDetails = new android.widget.TextView(ctx);
+        tvDetails.setText("");
+        tvDetails.setTextSize(12);
+        tvDetails.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
+        android.widget.LinearLayout.LayoutParams dp2 = new android.widget.LinearLayout.LayoutParams(-1, -2);
+        dp2.topMargin = AndroidUtilities.dp(4);
+        layout.addView(tvDetails, dp2);
+
+        AlertDialog.Builder pb = new AlertDialog.Builder(ctx);
+        pb.setTitle("🔄 تحويل الرسائل");
+        pb.setView(layout);
+
+        final long[] engineStartTime = {SystemClock.elapsedRealtime()};
+        final boolean[] isPaused = {false};
+
+        pb.setPositiveButton("⏸ توقف", (d, w) -> {
+            if (!isPaused[0]) { engine.pause(); isPaused[0] = true; }
+            else { engine.resume(); isPaused[0] = false; }
         });
-        pBuilder.setNegativeButton("إلغاء", (d, w) -> {
-            engine.stop();
-            d.dismiss();
-        });
-        pBuilder.setNeutralButton("في الخلفية", (d, w) -> d.dismiss());
+        pb.setNegativeButton("❌ إلغاء", (d, w) -> { engine.stop(); d.dismiss(); });
+        pb.setNeutralButton("🔽 خلفية", (d, w) -> d.dismiss());
 
-        progressDialog[0] = pBuilder.show();
-        progressDialog[0].setCancelable(false);
+        AlertDialog[] progressDlg = {pb.show()};
+        progressDlg[0].setCancelable(false);
 
-        // Callback
         engine.start(config, new ForwarderEngine.ProgressCallback() {
             @Override
-            public void onProgress(int sent, int total, String msg) {
+            public void onProgress(int sent, int total, String statusMsg) {
                 AndroidUtilities.runOnUIThread(() -> {
-                    statusTv.setText(msg);
+                    tvStatus.setText(statusMsg);
                     if (total > 0) {
-                        progressBar.setMax(total);
-                        progressBar.setProgress(sent);
+                        bar.setMax(total);
+                        bar.setProgress(sent);
+
+                        // نسبة مئوية
+                        int pct = (int)((sent * 100.0) / total);
+                        long elapsed = SystemClock.elapsedRealtime() - engineStartTime[0];
+
+                        // ETA
+                        String eta = "—";
+                        if (sent > 0 && elapsed > 2000) {
+                            double speed = sent * 1000.0 / elapsed;
+                            int remaining = total - sent;
+                            long etaSec = (long)(remaining / speed);
+                            if (etaSec > 60) eta = (etaSec / 60) + ":" + String.format("%02d", etaSec % 60) + " د";
+                            else eta = etaSec + " ث";
+                        }
+
+                        tvPercent.setText(pct + "% — متبقي: " + eta);
+
+                        // سرعة
+                        if (elapsed > 2000) {
+                            double speed = sent * 1000.0 / elapsed;
+                            tvDetails.setText(String.format("⚡ %.1f رسالة/ث", speed));
+                        }
+                    }
+
+                    // تحديث زر التوقف
+                    if (progressDlg[0] != null) {
+                        try {
+                            progressDlg[0].getButton(AlertDialog.BUTTON_POSITIVE)
+                                .setText(isPaused[0] ? "▶️ استمرار" : "⏸ توقف");
+                        } catch (Exception ignored) {}
                     }
                 });
             }
@@ -273,62 +228,93 @@ public class ForwarderChatButton {
             @Override
             public void onComplete(int totalSent, int totalSkipped, long durationMs) {
                 AndroidUtilities.runOnUIThread(() -> {
-                    if (progressDialog[0] != null && progressDialog[0].isShowing()) {
-                        progressDialog[0].dismiss();
-                    }
-
+                    dismiss(progressDlg);
                     double secs = durationMs / 1000.0;
                     String speed = secs > 0 ? String.format("%.1f", totalSent / secs) : "0";
+
                     String report =
-                        "📥 المصدر:  " + getChatName(MessagesController.getInstance(config.account), sourceId) + "\n" +
-                        "📤 الهدف:   " + getChatName(MessagesController.getInstance(config.account), targetId) + "\n" +
-                        "─────────────────────\n" +
+                        "📥 المصدر: " + getChatName(MessagesController.getInstance(config.account), sourceId) + "\n" +
+                        "📤 الهدف: " + getChatName(MessagesController.getInstance(config.account), targetId) + "\n" +
+                        "━━━━━━━━━━━━━━━━━\n" +
                         "✅ تم تحويل: " + String.format("%,d", totalSent) + " رسالة\n" +
                         "⏭️ تم تخطي: " + String.format("%,d", totalSkipped) + " مكرر\n" +
-                        "⚡ السرعة:  " + speed + " رسالة/ث";
+                        "⚡ السرعة: " + speed + " رسالة/ث\n" +
+                        "⏱️ المدة: " + formatDuration(durationMs);
 
                     new AlertDialog.Builder(ctx)
                         .setTitle("✅ اكتمل التحويل")
                         .setMessage(report)
-                        .setPositiveButton("حسناً", null)
-                        .show();
+                        .setPositiveButton("حسناً", null).show();
                 });
             }
 
             @Override
             public void onError(String errorMsg) {
                 AndroidUtilities.runOnUIThread(() -> {
-                    if (progressDialog[0] != null && progressDialog[0].isShowing()) {
-                        progressDialog[0].dismiss();
-                    }
-                    new AlertDialog.Builder(ctx)
-                        .setTitle("❌ خطأ")
-                        .setMessage(errorMsg)
-                        .setPositiveButton("حسناً", null)
-                        .show();
+                    dismiss(progressDlg);
+                    new AlertDialog.Builder(ctx).setTitle("❌ خطأ").setMessage(errorMsg)
+                        .setPositiveButton("حسناً", null).show();
                 });
             }
 
             @Override
             public void onRestricted(String chatName) {
                 AndroidUtilities.runOnUIThread(() -> {
-                    if (progressDialog[0] != null && progressDialog[0].isShowing()) {
-                        progressDialog[0].dismiss();
-                    }
-                    new AlertDialog.Builder(ctx)
-                        .setTitle("🚫 التحويل محظور")
-                        .setMessage("لا يمكن التحويل من:\n" + chatName +
-                            "\n\nهذه الدردشة تمنع إعادة توجيه رسائلها.")
-                        .setPositiveButton("حسناً", null)
-                        .show();
+                    dismiss(progressDlg);
+                    new AlertDialog.Builder(ctx).setTitle("🚫 محظور")
+                        .setMessage("لا يمكن التحويل من:\n" + chatName + "\n\nهذه الدردشة تمنع إعادة التوجيه.")
+                        .setPositiveButton("حسناً", null).show();
                 });
             }
         });
     }
 
     // ==========================================
-    // getChatName
+    // Helpers
     // ==========================================
+    private static void dismiss(AlertDialog[] dlg) {
+        if (dlg[0] != null && dlg[0].isShowing()) {
+            try { dlg[0].dismiss(); } catch (Exception ignored) {}
+        }
+    }
+
+    private static String formatDuration(long ms) {
+        long sec = ms / 1000;
+        if (sec < 60) return sec + " ثانية";
+        long min = sec / 60;
+        sec = sec % 60;
+        if (min < 60) return min + ":" + String.format("%02d", sec) + " دقيقة";
+        long hr = min / 60;
+        min = min % 60;
+        return hr + ":" + String.format("%02d", min) + ":" + String.format("%02d", sec);
+    }
+
+    private static void addInfoRow(android.widget.LinearLayout layout, Context ctx, String label, String value) {
+        android.widget.TextView lbl = new android.widget.TextView(ctx);
+        lbl.setText(label);
+        lbl.setTextSize(12);
+        lbl.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
+        layout.addView(lbl);
+
+        android.widget.TextView val = new android.widget.TextView(ctx);
+        val.setText(value);
+        val.setTextSize(15);
+        val.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
+        android.widget.LinearLayout.LayoutParams vp = new android.widget.LinearLayout.LayoutParams(-1, -2);
+        vp.bottomMargin = AndroidUtilities.dp(8);
+        layout.addView(val, vp);
+    }
+
+    private static android.widget.TextView addLink(android.widget.LinearLayout layout, Context ctx, String text) {
+        android.widget.TextView tv = new android.widget.TextView(ctx);
+        tv.setText(text);
+        tv.setTextSize(13);
+        tv.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText));
+        tv.setPadding(0, 0, 0, AndroidUtilities.dp(12));
+        layout.addView(tv);
+        return tv;
+    }
+
     private static String getChatName(MessagesController mc, long dialogId) {
         try {
             if (dialogId > 0) {
