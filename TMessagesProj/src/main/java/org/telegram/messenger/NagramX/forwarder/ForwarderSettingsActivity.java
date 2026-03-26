@@ -2,7 +2,6 @@ package org.telegram.messenger.NagramX.forwarder;
 
 import android.app.DatePickerDialog;
 import android.content.Context;
-import android.os.Bundle;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
@@ -16,6 +15,7 @@ import android.widget.TextView;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.ActionBar;
+import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
 
@@ -23,21 +23,11 @@ import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 
-/**
- * ForwarderSettingsActivity — صفحة الإعدادات
- *
- * الإصلاحات المطبقة:
- * ✅ buildConfig أصبح static — لا حاجة لإنشاء Fragment
- * ✅ إضافة import hashes UI
- * ✅ إضافة date filters (fromDate / toDate)
- * ✅ إضافة reverseOrder toggle
- * ✅ AsyncTask.execute بديل: Executors
- */
 public class ForwarderSettingsActivity extends BaseFragment {
 
-    // مفاتيح SharedPreferences
     public static final String PREF_SKIP_DUPLICATES   = "fwd_skip_duplicates";
     public static final String PREF_STRICT_DETECTION  = "fwd_strict_detection";
     public static final String PREF_DROP_AUTHOR        = "fwd_drop_author";
@@ -55,398 +45,344 @@ public class ForwarderSettingsActivity extends BaseFragment {
     public static final String PREF_TO_DATE            = "fwd_to_date";
     public static final String PREFS_NAME              = "NagramX_Forwarder";
 
-    private static final int    DEFAULT_CHUNK_SIZE   = 50;
-    private static final float  DEFAULT_DELAY        = 3f;
-    private static final int    DEFAULT_MAX_MESSAGES = 30_000;
+    private static final int DEFAULT_CHUNK = 50;
+    private static final float DEFAULT_DELAY = 3f;
+    private static final int DEFAULT_MAX = 30_000;
 
-    // UI references
-    private Switch switchSkipDuplicates;
-    private Switch switchStrictDetection;
-    private Switch switchDropAuthor;
-    private Switch switchDropCaption;
-    private Switch switchMediaOnly;
-    private Switch switchPhotoOnly;
-    private Switch switchVideoOnly;
-    private Switch switchAudioOnly;
-    private Switch switchGifOnly;
-    private Switch switchReverseOrder;
     private SeekBar seekbarChunk;
     private TextView labelChunkSize;
-    private EditText editDelay;
-    private EditText editMaxMessages;
-    private TextView tvFromDate;
-    private TextView tvToDate;
+    private EditText editDelay, editMaxMessages;
+    private TextView tvFromDate, tvToDate;
+    private Switch switchMediaOnly, switchPhotoOnly, switchVideoOnly, switchAudioOnly, switchGifOnly;
 
-    // DB reference
     private ForwarderHashDatabase hashDb;
-
-    public ForwarderSettingsActivity() {}
 
     @Override
     public View createView(Context context) {
         actionBar.setBackButtonImage(R.drawable.ic_ab_back);
-        actionBar.setTitle("إعدادات التحويل");
+        actionBar.setTitle("⚙️ إعدادات التحويل Pro");
         actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
             @Override
-            public void onItemClick(int id) {
-                if (id == -1) finishFragment();
-            }
+            public void onItemClick(int id) { if (id == -1) finishFragment(); }
         });
 
         hashDb = ForwarderHashDatabase.getInstance();
 
-        ScrollView scrollView = new ScrollView(context);
-        scrollView.setFillViewport(true);
+        ScrollView scroll = new ScrollView(context);
+        scroll.setFillViewport(true);
+        LinearLayout root = new LinearLayout(context);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(16), dp(12), dp(16), dp(24));
+        scroll.addView(root);
 
-        LinearLayout layout = new LinearLayout(context);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        int hPad = AndroidUtilities.dp(16);
-        int vPad = AndroidUtilities.dp(12);
-        layout.setPadding(hPad, vPad, hPad, vPad);
-        scrollView.addView(layout);
+        // ═══════════ منع التكرار ═══════════
+        header(root, context, "🔐 نظام منع التكرار");
 
-        // ==========================================
-        // قسم: منع التكرار
-        // ==========================================
-        addSectionHeader(layout, context, "🔐 منع التكرار");
+        addSwitch(root, context, "تجاهل الوسائط المُحوَّلة مسبقاً",
+            "يفحص قاعدة بيانات الهاشات قبل التحويل", PREF_SKIP_DUPLICATES, true);
 
-        switchSkipDuplicates = addSwitch(layout, context,
-            "تجاهل الوسائط المُحوَّلة مسبقاً",
-            "يفحص قاعدة بيانات الهاشات قبل كل تحويل",
-            PREF_SKIP_DUPLICATES, true);
+        addSwitch(root, context, "فحص صارم (file_reference)",
+            "يستخدم file_reference للكشف الأدق", PREF_STRICT_DETECTION, true);
 
-        switchStrictDetection = addSwitch(layout, context,
-            "فحص صارم (file_reference)",
-            "يستخدم file_reference للكشف الأدق عن المكررات",
-            PREF_STRICT_DETECTION, true);
+        clickable(root, context, "📊 إحصائيات قاعدة البيانات", v -> showStats(context));
+        clickable(root, context, "🗑️ مسح قاعدة البيانات", v -> confirmClear(context));
+        clickable(root, context, "📤 تصدير قاعدة البيانات", v -> doExport(context));
+        clickable(root, context, "📥 استيراد قاعدة البيانات", v -> doImport(context));
 
-        TextView btnDbStats = addClickableText(layout, context, "📊 إحصائيات قاعدة البيانات");
-        btnDbStats.setOnClickListener(v -> showDbStats(context));
+        divider(root, context);
 
-        TextView btnClearDb = addClickableText(layout, context, "🗑 مسح قاعدة بيانات الهاشات");
-        btnClearDb.setOnClickListener(v -> confirmClearDb(context));
+        // ═══════════ صيانة ═══════════
+        header(root, context, "🛠️ صيانة قاعدة البيانات");
 
-        TextView btnExportDb = addClickableText(layout, context, "📤 تصدير قاعدة البيانات");
-        btnExportDb.setOnClickListener(v -> exportDb(context));
+        clickable(root, context, "🔍 فحص سلامة قاعدة البيانات", v -> checkIntegrity(context));
+        clickable(root, context, "🛠️ إصلاح وتحسين (Repair + VACUUM)", v -> doRepair(context));
+        clickable(root, context, "🧹 حذف الهاشات القديمة غير المتوافقة", v -> doCleanup(context));
 
-        // ✅ جديد: استيراد
-        TextView btnImportDb = addClickableText(layout, context, "📥 استيراد قاعدة البيانات");
-        btnImportDb.setOnClickListener(v -> importDb(context));
+        divider(root, context);
 
-        addDivider(layout, context);
+        // ═══════════ إعدادات الإرسال ═══════════
+        header(root, context, "⏱️ إعدادات الإرسال");
 
-        // ==========================================
-        // قسم: إعدادات الإرسال
-        // ==========================================
-        addSectionHeader(layout, context, "⏱ إعدادات الإرسال");
-
-        labelChunkSize = addLabel(layout, context, "حجم الدفعة: " + getPrefs(context).getInt(PREF_CHUNK_SIZE, DEFAULT_CHUNK_SIZE));
+        labelChunkSize = label(root, context, "📦 حجم الدفعة: " + prefs(context).getInt(PREF_CHUNK_SIZE, DEFAULT_CHUNK));
         seekbarChunk = new SeekBar(context);
         seekbarChunk.setMax(94);
-        seekbarChunk.setProgress(getPrefs(context).getInt(PREF_CHUNK_SIZE, DEFAULT_CHUNK_SIZE) - 1);
+        seekbarChunk.setProgress(prefs(context).getInt(PREF_CHUNK_SIZE, DEFAULT_CHUNK) - 1);
         seekbarChunk.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar s, int p, boolean u) {
-                labelChunkSize.setText("حجم الدفعة: " + (p + 1));
-            }
+            @Override public void onProgressChanged(SeekBar s, int p, boolean u) { labelChunkSize.setText("📦 حجم الدفعة: " + (p + 1)); }
             @Override public void onStartTrackingTouch(SeekBar s) {}
-            @Override public void onStopTrackingTouch(SeekBar s) {
-                getPrefs(context).edit().putInt(PREF_CHUNK_SIZE, s.getProgress() + 1).apply();
-            }
+            @Override public void onStopTrackingTouch(SeekBar s) { prefs(context).edit().putInt(PREF_CHUNK_SIZE, s.getProgress() + 1).apply(); }
         });
-        LinearLayout.LayoutParams sbParams = new LinearLayout.LayoutParams(-1, -2);
-        sbParams.topMargin = AndroidUtilities.dp(6);
-        layout.addView(seekbarChunk, sbParams);
+        LinearLayout.LayoutParams sbP = new LinearLayout.LayoutParams(-1, -2);
+        sbP.topMargin = dp(6);
+        root.addView(seekbarChunk, sbP);
 
-        editDelay = addEditText(layout, context,
-            "التأخير بين الدفعات (ثواني)",
-            String.valueOf(getPrefs(context).getFloat(PREF_DELAY_SECONDS, DEFAULT_DELAY)),
+        editDelay = editText(root, context, "⏱️ التأخير بين الدفعات (ثواني)",
+            String.valueOf(prefs(context).getFloat(PREF_DELAY_SECONDS, DEFAULT_DELAY)),
             InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
 
-        editMaxMessages = addEditText(layout, context,
-            "الحد الأقصى للرسائل",
-            String.valueOf(getPrefs(context).getInt(PREF_MAX_MESSAGES, DEFAULT_MAX_MESSAGES)),
+        editMaxMessages = editText(root, context, "📊 الحد الأقصى للرسائل",
+            String.valueOf(prefs(context).getInt(PREF_MAX_MESSAGES, DEFAULT_MAX)),
             InputType.TYPE_CLASS_NUMBER);
 
-        // ✅ جديد: ترتيب عكسي
-        switchReverseOrder = addSwitch(layout, context,
-            "ترتيب عكسي (الأحدث أولاً)",
-            "يحوّل من الأحدث للأقدم بدل العكس",
-            PREF_REVERSE_ORDER, false);
+        addSwitch(root, context, "🔄 ترتيب عكسي (الأحدث أولاً)",
+            "يحوّل من الأحدث للأقدم", PREF_REVERSE_ORDER, false);
 
-        addDivider(layout, context);
+        divider(root, context);
 
-        // ==========================================
-        // قسم: خيارات التحويل
-        // ==========================================
-        addSectionHeader(layout, context, "✂️ خيارات التحويل");
+        // ═══════════ خيارات التحويل ═══════════
+        header(root, context, "✂️ خيارات التحويل");
 
-        switchDropAuthor = addSwitch(layout, context,
-            "إخفاء المُرسِل الأصلي",
-            "يُرسِل الرسائل بدون ذكر المصدر",
-            PREF_DROP_AUTHOR, false);
+        addSwitch(root, context, "👤 إخفاء المُرسِل الأصلي",
+            "يُرسِل بدون ذكر المصدر", PREF_DROP_AUTHOR, false);
+        addSwitch(root, context, "✂️ إخفاء التعليق (Caption)",
+            "يحذف النص المرفق مع الوسائط", PREF_DROP_CAPTION, false);
 
-        switchDropCaption = addSwitch(layout, context,
-            "إخفاء التعليق (Caption)",
-            "يحذف النص المرفق مع الصور والفيديوهات",
-            PREF_DROP_CAPTION, false);
+        divider(root, context);
 
-        addDivider(layout, context);
+        // ═══════════ فلاتر الوسائط ═══════════
+        header(root, context, "🎭 فلاتر الوسائط (اختر واحداً)");
 
-        // ==========================================
-        // قسم: فلاتر الوسائط
-        // ==========================================
-        addSectionHeader(layout, context, "🎭 فلاتر الوسائط (اختر واحداً فقط)");
+        switchMediaOnly = addSwitch(root, context, "🖼️ وسائط فقط", "", PREF_MEDIA_ONLY, false);
+        switchPhotoOnly = addSwitch(root, context, "📸 صور فقط", "", PREF_PHOTO_ONLY, false);
+        switchVideoOnly = addSwitch(root, context, "🎬 فيديو فقط", "", PREF_VIDEO_ONLY, false);
+        switchAudioOnly = addSwitch(root, context, "🎵 صوت فقط", "", PREF_AUDIO_ONLY, false);
+        switchGifOnly   = addSwitch(root, context, "🎞️ GIF فقط", "", PREF_GIF_ONLY, false);
 
-        switchMediaOnly  = addSwitch(layout, context, "وسائط فقط (صور + فيديو)", "", PREF_MEDIA_ONLY,  false);
-        switchPhotoOnly  = addSwitch(layout, context, "صور فقط",                  "", PREF_PHOTO_ONLY,  false);
-        switchVideoOnly  = addSwitch(layout, context, "فيديو فقط",                "", PREF_VIDEO_ONLY,  false);
-        switchAudioOnly  = addSwitch(layout, context, "صوت فقط",                  "", PREF_AUDIO_ONLY,  false);
-        switchGifOnly    = addSwitch(layout, context, "GIF فقط",                  "", PREF_GIF_ONLY,    false);
+        View.OnClickListener filterClick = v -> enforceOneFilter(v, context);
+        switchMediaOnly.setOnClickListener(filterClick);
+        switchPhotoOnly.setOnClickListener(filterClick);
+        switchVideoOnly.setOnClickListener(filterClick);
+        switchAudioOnly.setOnClickListener(filterClick);
+        switchGifOnly.setOnClickListener(filterClick);
 
-        View.OnClickListener mediaFilterListener = v -> enforceOnlyOneFilter(v, context);
-        switchMediaOnly.setOnClickListener(mediaFilterListener);
-        switchPhotoOnly.setOnClickListener(mediaFilterListener);
-        switchVideoOnly.setOnClickListener(mediaFilterListener);
-        switchAudioOnly.setOnClickListener(mediaFilterListener);
-        switchGifOnly.setOnClickListener(mediaFilterListener);
+        divider(root, context);
 
-        addDivider(layout, context);
+        // ═══════════ فلاتر التاريخ ═══════════
+        header(root, context, "📅 فلاتر التاريخ");
 
-        // ==========================================
-        // ✅ جديد: فلاتر التاريخ
-        // ==========================================
-        addSectionHeader(layout, context, "📅 فلاتر التاريخ");
-
-        long savedFrom = getPrefs(context).getLong(PREF_FROM_DATE, 0);
-        long savedTo = getPrefs(context).getLong(PREF_TO_DATE, 0);
-
-        tvFromDate = addClickableText(layout, context,
-            "📅 من تاريخ: " + (savedFrom > 0 ? formatDate(savedFrom) : "بدون حد"));
-        tvFromDate.setOnClickListener(v -> showDatePicker(context, true));
-
-        tvToDate = addClickableText(layout, context,
-            "📅 إلى تاريخ: " + (savedTo > 0 ? formatDate(savedTo) : "بدون حد"));
-        tvToDate.setOnClickListener(v -> showDatePicker(context, false));
-
-        TextView btnClearDates = addClickableText(layout, context, "🗑 مسح فلاتر التاريخ");
-        btnClearDates.setOnClickListener(v -> {
-            getPrefs(context).edit().putLong(PREF_FROM_DATE, 0).putLong(PREF_TO_DATE, 0).apply();
-            tvFromDate.setText("📅 من تاريخ: بدون حد");
-            tvToDate.setText("📅 إلى تاريخ: بدون حد");
+        long from = prefs(context).getLong(PREF_FROM_DATE, 0);
+        long to = prefs(context).getLong(PREF_TO_DATE, 0);
+        tvFromDate = clickable(root, context, "📅 من: " + (from > 0 ? fmtDate(from) : "بدون حد"), v -> pickDate(context, true));
+        tvToDate = clickable(root, context, "📅 إلى: " + (to > 0 ? fmtDate(to) : "بدون حد"), v -> pickDate(context, false));
+        clickable(root, context, "🗑️ مسح فلاتر التاريخ", v -> {
+            prefs(context).edit().putLong(PREF_FROM_DATE, 0).putLong(PREF_TO_DATE, 0).apply();
+            tvFromDate.setText("📅 من: بدون حد");
+            tvToDate.setText("📅 إلى: بدون حد");
         });
 
-        addDivider(layout, context);
-
-        return scrollView;
+        return scroll;
     }
 
-    // ==========================================
-    // enforceOnlyOneFilter
-    // ==========================================
-    private void enforceOnlyOneFilter(View activated, Context context) {
+    // ═══════════════════════════════════════════
+    // إحصائيات مفصلة
+    // ═══════════════════════════════════════════
+    private void showStats(Context ctx) {
+        ForwarderHashDatabase.ForwarderStats s = hashDb.getStats();
+        StringBuilder sb = new StringBuilder();
+        sb.append("📁 مسار DB:\n").append(s.dbPath).append("\n\n");
+        sb.append("📤 مسار التصدير:\n").append(s.exportPath).append("\n\n");
+        sb.append("━━━━━━━━━━━━━━━━━\n");
+        sb.append("📊 إجمالي الهاشات: ").append(String.format("%,d", s.totalHashes)).append("\n");
+        sb.append("💾 حجم DB: ").append(s.formatSize()).append("\n");
+        sb.append("🧠 الكاش: ").append(String.format("%,d", s.cacheSize)).append("\n");
+        sb.append("📝 كتابات معلقة: ").append(s.pendingWrites).append("\n");
+        sb.append("🔄 WAL: ").append(s.journalMode != null ? s.journalMode : "—").append("\n\n");
+
+        if (s.oldestHashDays > 0) sb.append("📅 أقدم هاش: ").append(String.format("%.1f", s.oldestHashDays)).append(" يوم\n");
+        if (s.newestHashDays >= 0) sb.append("📅 أحدث هاش: ").append(String.format("%.1f", s.newestHashDays)).append(" يوم\n\n");
+
+        sb.append("━━━━━━━━━━━━━━━━━\n");
+        sb.append(s.integrityOk ? "✅ سلامة DB: سليمة" : "⚠️ سلامة DB: تالفة!").append("\n");
+        sb.append(s.corrupted ? "⚠️ حالة: تالفة" : "✅ حالة: تعمل").append("\n\n");
+
+        if (s.hashTypeBreakdown != null && !s.hashTypeBreakdown.isEmpty()) {
+            sb.append("📊 توزيع أنواع الهاشات:\n");
+            for (String[] item : s.hashTypeBreakdown) {
+                sb.append("   • ").append(item[0]).append(": ").append(String.format("%,d", Long.parseLong(item[1]))).append("\n");
+            }
+        }
+
+        new AlertDialog.Builder(ctx).setTitle("📊 إحصائيات قاعدة البيانات").setMessage(sb.toString())
+            .setPositiveButton("حسناً", null).show();
+    }
+
+    // ═══════════════════════════════════════════
+    // تصدير
+    // ═══════════════════════════════════════════
+    private void doExport(Context ctx) {
+        java.util.concurrent.Executors.newSingleThreadExecutor().execute(() -> {
+            String path = hashDb.exportToJson();
+            AndroidUtilities.runOnUIThread(() -> {
+                if (path != null) {
+                    new AlertDialog.Builder(ctx).setTitle("✅ تم التصدير")
+                        .setMessage("📁 الملف:\n" + path).setPositiveButton("حسناً", null).show();
+                } else {
+                    new AlertDialog.Builder(ctx).setTitle("❌ فشل التصدير")
+                        .setMessage("تحقق من صلاحيات التخزين.\n\nتأكد من إعطاء التطبيق صلاحية 'All files access' من إعدادات الهاتف.")
+                        .setPositiveButton("حسناً", null).show();
+                }
+            });
+        });
+    }
+
+    // ═══════════════════════════════════════════
+    // استيراد
+    // ═══════════════════════════════════════════
+    private void doImport(Context ctx) {
+        List<File> files = hashDb.findImportFiles();
+        if (files.isEmpty()) {
+            new AlertDialog.Builder(ctx).setTitle("📥 استيراد")
+                .setMessage("لا توجد ملفات هاشات.\n\nأماكن البحث:\n📁 " + hashDb.getMediaDir() +
+                    "\n📁 Downloads\n📁 ForwarderPro_State\n\nضع ملف JSON في أحد هذه المجلدات.")
+                .setPositiveButton("حسناً", null).show();
+            return;
+        }
+
+        String[] names = new String[files.size()];
+        for (int i = 0; i < files.size(); i++) {
+            File f = files.get(i);
+            names[i] = f.getName() + " (" + (f.length() / 1024) + " KB)\n📁 " + f.getParent();
+        }
+
+        new AlertDialog.Builder(ctx).setTitle("📥 اختر ملف الاستيراد")
+            .setItems(names, (d, which) -> {
+                File sel = files.get(which);
+                new AlertDialog.Builder(ctx).setTitle("📥 تأكيد")
+                    .setMessage("استيراد من:\n" + sel.getName() + "\n\nسيُضاف الجديد فقط.")
+                    .setPositiveButton("استيراد", (d2, w) -> {
+                        java.util.concurrent.Executors.newSingleThreadExecutor().execute(() -> {
+                            int added = hashDb.importFromJson(sel);
+                            AndroidUtilities.runOnUIThread(() ->
+                                new AlertDialog.Builder(ctx)
+                                    .setTitle(added > 0 ? "✅ تم الاستيراد" : "ℹ️ لا جديد")
+                                    .setMessage(added > 0 ? "تم استيراد " + added + " هاش جديد" : "كل الهاشات موجودة مسبقاً")
+                                    .setPositiveButton("حسناً", null).show()
+                            );
+                        });
+                    }).setNegativeButton("إلغاء", null).show();
+            }).setNegativeButton("إلغاء", null).show();
+    }
+
+    // ═══════════════════════════════════════════
+    // فحص السلامة
+    // ═══════════════════════════════════════════
+    private void checkIntegrity(Context ctx) {
+        ForwarderHashDatabase.ForwarderStats s = hashDb.getStats();
+        String status = s.integrityOk ? "✅ قاعدة البيانات سليمة تماماً" : "⚠️ قاعدة البيانات بها مشاكل!";
+        new AlertDialog.Builder(ctx).setTitle("🔍 فحص السلامة").setMessage(status +
+            "\n\nالحجم: " + s.formatSize() + "\nالهاشات: " + String.format("%,d", s.totalHashes) +
+            "\nWAL: " + s.journalMode)
+            .setPositiveButton("حسناً", null).show();
+    }
+
+    // ═══════════════════════════════════════════
+    // إصلاح
+    // ═══════════════════════════════════════════
+    private void doRepair(Context ctx) {
+        new AlertDialog.Builder(ctx).setTitle("🛠️ إصلاح DB")
+            .setMessage("سيقوم بـ:\n• تصحيح hash_type للسجلات الخاطئة\n• حذف indexes مكررة\n• VACUUM لتقليص الحجم\n\n✅ آمن — لا حذف للهاشات")
+            .setPositiveButton("ابدأ", (d, w) -> {
+                java.util.concurrent.Executors.newSingleThreadExecutor().execute(() -> {
+                    ForwarderHashDatabase.RepairResult r = hashDb.repairDatabase();
+                    AndroidUtilities.runOnUIThread(() -> {
+                        if (r.success) {
+                            new AlertDialog.Builder(ctx).setTitle("✅ اكتمل الإصلاح")
+                                .setMessage("🔖 hash_type مُصحَّح: " + r.fixedTypes +
+                                    "\n🗂️ Index مكرر: " + (r.removedDuplicateIndex ? "حُذف" : "لا يوجد") +
+                                    "\n📦 VACUUM: " + (r.vacuumed ? "✅" : "❌") +
+                                    "\n💡 وُفِّر: " + r.formatSaved())
+                                .setPositiveButton("حسناً", null).show();
+                        } else {
+                            new AlertDialog.Builder(ctx).setTitle("❌ فشل").setMessage(r.error)
+                                .setPositiveButton("حسناً", null).show();
+                        }
+                    });
+                });
+            }).setNegativeButton("إلغاء", null).show();
+    }
+
+    // ═══════════════════════════════════════════
+    // تنظيف الهاشات القديمة
+    // ═══════════════════════════════════════════
+    private void doCleanup(Context ctx) {
+        new AlertDialog.Builder(ctx).setTitle("🧹 حذف القديمة")
+            .setMessage("سيحذف الهاشات من أنظمة قديمة:\n• legacy_fp\n• legacy_numeric_id\n• unknown\n\n⚠️ غير قابل للتراجع")
+            .setPositiveButton("حذف", (d, w) -> {
+                java.util.concurrent.Executors.newSingleThreadExecutor().execute(() -> {
+                    int deleted = hashDb.cleanupLegacyHashes();
+                    AndroidUtilities.runOnUIThread(() ->
+                        new AlertDialog.Builder(ctx).setTitle(deleted > 0 ? "✅ تم" : "ℹ️ نظيف")
+                            .setMessage(deleted > 0 ? "تم حذف " + deleted + " هاش قديم" : "لا توجد هاشات قديمة")
+                            .setPositiveButton("حسناً", null).show()
+                    );
+                });
+            }).setNegativeButton("إلغاء", null).show();
+    }
+
+    // ═══════════════════════════════════════════
+    private void confirmClear(Context ctx) {
+        new AlertDialog.Builder(ctx).setTitle("🗑️ مسح كل الهاشات")
+            .setMessage("⚠️ سيُحذف كل شي!\nغير قابل للتراجع.")
+            .setPositiveButton("مسح", (d, w) -> {
+                long c = hashDb.clearAll();
+                new AlertDialog.Builder(ctx).setTitle("✅ تم").setMessage("تم مسح " + c + " هاش").setPositiveButton("حسناً", null).show();
+            }).setNegativeButton("إلغاء", null).show();
+    }
+
+    private void enforceOneFilter(View activated, Context ctx) {
         Switch[] all = {switchMediaOnly, switchPhotoOnly, switchVideoOnly, switchAudioOnly, switchGifOnly};
         String[] keys = {PREF_MEDIA_ONLY, PREF_PHOTO_ONLY, PREF_VIDEO_ONLY, PREF_AUDIO_ONLY, PREF_GIF_ONLY};
         for (int i = 0; i < all.length; i++) {
             if (all[i] == activated) continue;
             all[i].setChecked(false);
-            getPrefs(context).edit().putBoolean(keys[i], false).apply();
+            prefs(ctx).edit().putBoolean(keys[i], false).apply();
         }
     }
 
-    // ==========================================
-    // Date Picker
-    // ==========================================
-    private void showDatePicker(Context context, boolean isFrom) {
+    private void pickDate(Context ctx, boolean isFrom) {
         Calendar cal = Calendar.getInstance();
-        DatePickerDialog dpd = new DatePickerDialog(context, (view, year, month, day) -> {
-            Calendar selected = Calendar.getInstance();
-            selected.set(year, month, day, 0, 0, 0);
-            long ts = selected.getTimeInMillis() / 1000;
+        new DatePickerDialog(ctx, (v, y, m, d) -> {
+            Calendar s = Calendar.getInstance();
+            s.set(y, m, d, 0, 0, 0);
+            long ts = s.getTimeInMillis() / 1000;
             if (isFrom) {
-                getPrefs(context).edit().putLong(PREF_FROM_DATE, ts).apply();
-                tvFromDate.setText("📅 من تاريخ: " + formatDate(ts));
+                prefs(ctx).edit().putLong(PREF_FROM_DATE, ts).apply();
+                tvFromDate.setText("📅 من: " + fmtDate(ts));
             } else {
-                getPrefs(context).edit().putLong(PREF_TO_DATE, ts).apply();
-                tvToDate.setText("📅 إلى تاريخ: " + formatDate(ts));
+                prefs(ctx).edit().putLong(PREF_TO_DATE, ts).apply();
+                tvToDate.setText("📅 إلى: " + fmtDate(ts));
             }
-        }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH));
-        dpd.show();
+        }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show();
     }
 
-    private String formatDate(long ts) {
-        try {
-            return new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date(ts * 1000));
-        } catch (Exception e) {
-            return "---";
-        }
+    private String fmtDate(long ts) {
+        try { return new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date(ts * 1000)); }
+        catch (Exception e) { return "—"; }
     }
 
-    // ==========================================
-    // DB Operations
-    // ==========================================
-    private void showDbStats(Context context) {
-        ForwarderHashDatabase.ForwarderStats stats = hashDb.getStats();
-        String msg =
-            "📁 المسار: " + stats.dbPath + "\n" +
-            "📊 الهاشات: " + String.format("%,d", stats.totalHashes) + "\n" +
-            "💾 الحجم: " + stats.formatSize() + "\n" +
-            "🧠 الكاش: " + String.format("%,d", stats.cacheSize) + "\n" +
-            "📅 أقدم هاش: " + String.format("%.1f", stats.oldestHashDays) + " يوم\n" +
-            (stats.corrupted ? "⚠️ قاعدة البيانات تالفة!" : "✅ قاعدة البيانات سليمة");
-
-        new org.telegram.ui.ActionBar.AlertDialog.Builder(context)
-            .setTitle("🔐 إحصائيات قاعدة البيانات")
-            .setMessage(msg)
-            .setPositiveButton("حسناً", null)
-            .show();
-    }
-
-    private void confirmClearDb(Context context) {
-        new org.telegram.ui.ActionBar.AlertDialog.Builder(context)
-            .setTitle("🗑 مسح قاعدة البيانات")
-            .setMessage("هل تريد مسح كل الهاشات؟\n⚠️ هذا الإجراء غير قابل للتراجع.")
-            .setPositiveButton("مسح", (dialog, which) -> {
-                long count = hashDb.clearAll();
-                new org.telegram.ui.ActionBar.AlertDialog.Builder(context)
-                    .setTitle("✅ تم المسح")
-                    .setMessage("تم مسح " + count + " هاش")
-                    .setPositiveButton("حسناً", null)
-                    .show();
-            })
-            .setNegativeButton("إلغاء", null)
-            .show();
-    }
-
-    // ✅ إصلاح: بديل AsyncTask.execute
-    private void exportDb(Context context) {
-        java.util.concurrent.Executors.newSingleThreadExecutor().execute(() -> {
-            try {
-                File exportDir = new File(
-                    context.getExternalFilesDir(null), "NagramX_Export");
-                //noinspection ResultOfMethodCallIgnored
-                exportDir.mkdirs();
-                File exportFile = new File(exportDir,
-                    "forwarder_hashes_" + System.currentTimeMillis() + ".json");
-                boolean ok = hashDb.exportToJson(exportFile);
-                AndroidUtilities.runOnUIThread(() -> {
-                    new org.telegram.ui.ActionBar.AlertDialog.Builder(context)
-                        .setTitle(ok ? "✅ تم التصدير" : "❌ فشل التصدير")
-                        .setMessage(ok ? "📁 " + exportFile.getAbsolutePath() : "تحقق من صلاحيات الكتابة")
-                        .setPositiveButton("حسناً", null)
-                        .show();
-                });
-            } catch (Exception e) {
-                AndroidUtilities.runOnUIThread(() ->
-                    new org.telegram.ui.ActionBar.AlertDialog.Builder(context)
-                        .setTitle("❌ خطأ")
-                        .setMessage(e.getMessage())
-                        .setPositiveButton("حسناً", null)
-                        .show()
-                );
-            }
-        });
-    }
-
-    // ✅ جديد: استيراد قاعدة البيانات
-    private void importDb(Context context) {
-        // ابحث عن ملفات JSON في مجلد التصدير
-        File exportDir = new File(context.getExternalFilesDir(null), "NagramX_Export");
-        File downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(
-            android.os.Environment.DIRECTORY_DOWNLOADS);
-
-        java.util.List<File> jsonFiles = new java.util.ArrayList<>();
-
-        // ابحث في مجلد التصدير
-        if (exportDir.exists() && exportDir.isDirectory()) {
-            File[] files = exportDir.listFiles((dir, name) ->
-                name.endsWith(".json") && (name.contains("hashes") || name.contains("forwarder")));
-            if (files != null) {
-                for (File f : files) jsonFiles.add(f);
-            }
-        }
-
-        // ابحث في Downloads
-        if (downloadsDir != null && downloadsDir.exists() && downloadsDir.isDirectory()) {
-            File[] files = downloadsDir.listFiles((dir, name) ->
-                name.endsWith(".json") && (name.contains("hashes") || name.contains("forwarder")));
-            if (files != null) {
-                for (File f : files) jsonFiles.add(f);
-            }
-        }
-
-        if (jsonFiles.isEmpty()) {
-            new org.telegram.ui.ActionBar.AlertDialog.Builder(context)
-                .setTitle("📥 استيراد")
-                .setMessage("لا توجد ملفات هاشات.\n\nابحث في:\n📁 " +
-                    (exportDir.exists() ? exportDir.getAbsolutePath() : "NagramX_Export") +
-                    "\n📁 Downloads\n\nضع ملف JSON يحتوي على هاشات في أحد هذه المجلدات.")
-                .setPositiveButton("حسناً", null)
-                .show();
-            return;
-        }
-
-        // اعرض قائمة الملفات
-        String[] fileNames = new String[jsonFiles.size()];
-        for (int i = 0; i < jsonFiles.size(); i++) {
-            File f = jsonFiles.get(i);
-            long sizeKb = f.length() / 1024;
-            fileNames[i] = f.getName() + " (" + sizeKb + " KB)";
-        }
-
-        new org.telegram.ui.ActionBar.AlertDialog.Builder(context)
-            .setTitle("📥 اختر ملف الاستيراد")
-            .setItems(fileNames, (dialog, which) -> {
-                File selected = jsonFiles.get(which);
-                // تأكيد
-                new org.telegram.ui.ActionBar.AlertDialog.Builder(context)
-                    .setTitle("📥 تأكيد الاستيراد")
-                    .setMessage("استيراد من:\n" + selected.getName() + "\n\nسيتم إضافة الهاشات الجديدة فقط.")
-                    .setPositiveButton("استيراد", (d2, w2) -> {
-                        java.util.concurrent.Executors.newSingleThreadExecutor().execute(() -> {
-                            int added = hashDb.importFromJson(selected);
-                            AndroidUtilities.runOnUIThread(() ->
-                                new org.telegram.ui.ActionBar.AlertDialog.Builder(context)
-                                    .setTitle(added > 0 ? "✅ تم الاستيراد" : "ℹ️ لا جديد")
-                                    .setMessage(added > 0
-                                        ? "تم استيراد " + added + " هاش جديد"
-                                        : "لم يتم إضافة أي هاشات جديدة (كلها موجودة مسبقاً)")
-                                    .setPositiveButton("حسناً", null)
-                                    .show()
-                            );
-                        });
-                    })
-                    .setNegativeButton("إلغاء", null)
-                    .show();
-            })
-            .setNegativeButton("إلغاء", null)
-            .show();
-    }
-
-    // ==========================================
-    // ✅ buildConfig — أصبح static
-    // ==========================================
-    public static ForwarderEngine.ForwardConfig buildConfig(Context context, long sourceId, long targetId) {
-        ForwarderEngine.ForwardConfig cfg = new ForwarderEngine.ForwardConfig();
-        cfg.sourceId = sourceId;
-        cfg.targetId = targetId;
-
-        android.content.SharedPreferences p = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        cfg.skipDuplicates  = p.getBoolean(PREF_SKIP_DUPLICATES, true);
-        cfg.strictDetection = p.getBoolean(PREF_STRICT_DETECTION, true);
-        cfg.dropAuthor      = p.getBoolean(PREF_DROP_AUTHOR, false);
-        cfg.dropCaption     = p.getBoolean(PREF_DROP_CAPTION, false);
-        cfg.chunkSize       = p.getInt(PREF_CHUNK_SIZE, DEFAULT_CHUNK_SIZE);
-        cfg.delaySeconds    = p.getFloat(PREF_DELAY_SECONDS, DEFAULT_DELAY);
-        cfg.maxMessages     = p.getInt(PREF_MAX_MESSAGES, DEFAULT_MAX_MESSAGES);
-        cfg.mediaOnly       = p.getBoolean(PREF_MEDIA_ONLY, false);
-        cfg.photoOnly       = p.getBoolean(PREF_PHOTO_ONLY, false);
-        cfg.videoOnly       = p.getBoolean(PREF_VIDEO_ONLY, false);
-        cfg.audioOnly       = p.getBoolean(PREF_AUDIO_ONLY, false);
-        cfg.gifOnly         = p.getBoolean(PREF_GIF_ONLY, false);
-        cfg.reverseOrder    = p.getBoolean(PREF_REVERSE_ORDER, false);
-        cfg.fromDateTs      = p.getLong(PREF_FROM_DATE, 0);
-        cfg.toDateTs        = p.getLong(PREF_TO_DATE, 0);
-        return cfg;
+    // ═══════════════════════════════════════════
+    // buildConfig — static
+    // ═══════════════════════════════════════════
+    public static ForwarderEngine.ForwardConfig buildConfig(Context ctx, long src, long tgt) {
+        ForwarderEngine.ForwardConfig c = new ForwarderEngine.ForwardConfig();
+        c.sourceId = src; c.targetId = tgt;
+        android.content.SharedPreferences p = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        c.skipDuplicates = p.getBoolean(PREF_SKIP_DUPLICATES, true);
+        c.strictDetection = p.getBoolean(PREF_STRICT_DETECTION, true);
+        c.dropAuthor = p.getBoolean(PREF_DROP_AUTHOR, false);
+        c.dropCaption = p.getBoolean(PREF_DROP_CAPTION, false);
+        c.chunkSize = p.getInt(PREF_CHUNK_SIZE, DEFAULT_CHUNK);
+        c.delaySeconds = p.getFloat(PREF_DELAY_SECONDS, DEFAULT_DELAY);
+        c.maxMessages = p.getInt(PREF_MAX_MESSAGES, DEFAULT_MAX);
+        c.mediaOnly = p.getBoolean(PREF_MEDIA_ONLY, false);
+        c.photoOnly = p.getBoolean(PREF_PHOTO_ONLY, false);
+        c.videoOnly = p.getBoolean(PREF_VIDEO_ONLY, false);
+        c.audioOnly = p.getBoolean(PREF_AUDIO_ONLY, false);
+        c.gifOnly = p.getBoolean(PREF_GIF_ONLY, false);
+        c.reverseOrder = p.getBoolean(PREF_REVERSE_ORDER, false);
+        c.fromDateTs = p.getLong(PREF_FROM_DATE, 0);
+        c.toDateTs = p.getLong(PREF_TO_DATE, 0);
+        return c;
     }
 
     @Override
@@ -454,101 +390,92 @@ public class ForwarderSettingsActivity extends BaseFragment {
         super.onFragmentDestroy();
         if (getParentActivity() != null && editDelay != null) {
             try {
-                float delay = Float.parseFloat(editDelay.getText().toString());
-                int max = Integer.parseInt(editMaxMessages.getText().toString());
-                getPrefs(getParentActivity()).edit()
-                    .putFloat(PREF_DELAY_SECONDS, delay)
-                    .putInt(PREF_MAX_MESSAGES, max)
+                prefs(getParentActivity()).edit()
+                    .putFloat(PREF_DELAY_SECONDS, Float.parseFloat(editDelay.getText().toString()))
+                    .putInt(PREF_MAX_MESSAGES, Integer.parseInt(editMaxMessages.getText().toString()))
                     .apply();
             } catch (Exception ignored) {}
         }
-        // لا نغلق hashDb — هو Singleton
     }
 
-    // ==========================================
-    // UI helpers
-    // ==========================================
-    private void addSectionHeader(LinearLayout layout, Context ctx, String title) {
+    // ═══════════════════════════════════════════
+    // UI Helpers
+    // ═══════════════════════════════════════════
+    private void header(LinearLayout root, Context ctx, String text) {
         TextView tv = new TextView(ctx);
-        tv.setText(title);
-        tv.setTextSize(15);
+        tv.setText(text);
+        tv.setTextSize(16);
         tv.setTypeface(tv.getTypeface(), android.graphics.Typeface.BOLD);
         tv.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueHeader));
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2);
-        p.topMargin = AndroidUtilities.dp(16);
-        p.bottomMargin = AndroidUtilities.dp(6);
-        layout.addView(tv, p);
+        p.topMargin = dp(20); p.bottomMargin = dp(8);
+        root.addView(tv, p);
     }
 
-    private Switch addSwitch(LinearLayout layout, Context ctx, String text, String subtext,
-                              String prefKey, boolean defaultValue) {
+    private Switch addSwitch(LinearLayout root, Context ctx, String text, String sub, String key, boolean def) {
         Switch sw = new Switch(ctx);
         sw.setText(text);
-        sw.setChecked(getPrefs(ctx).getBoolean(prefKey, defaultValue));
+        sw.setChecked(prefs(ctx).getBoolean(key, def));
         sw.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
-        sw.setOnCheckedChangeListener((v, checked) ->
-            getPrefs(ctx).edit().putBoolean(prefKey, checked).apply());
+        sw.setTextSize(15);
+        sw.setOnCheckedChangeListener((v, c) -> prefs(ctx).edit().putBoolean(key, c).apply());
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2);
-        p.topMargin = AndroidUtilities.dp(8);
-        layout.addView(sw, p);
-        if (!subtext.isEmpty()) {
-            TextView sub = new TextView(ctx);
-            sub.setText(subtext);
-            sub.setTextSize(12);
-            sub.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
+        p.topMargin = dp(10);
+        root.addView(sw, p);
+        if (sub != null && !sub.isEmpty()) {
+            TextView s = new TextView(ctx);
+            s.setText(sub); s.setTextSize(12);
+            s.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
             LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, -2);
-            sp.leftMargin = AndroidUtilities.dp(40);
-            layout.addView(sub, sp);
+            sp.leftMargin = dp(48); sp.topMargin = dp(2);
+            root.addView(s, sp);
         }
         return sw;
     }
 
-    private TextView addLabel(LinearLayout layout, Context ctx, String text) {
+    private TextView label(LinearLayout root, Context ctx, String text) {
         TextView tv = new TextView(ctx);
-        tv.setText(text);
+        tv.setText(text); tv.setTextSize(14);
         tv.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
         tv.setGravity(Gravity.CENTER_HORIZONTAL);
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2);
-        p.topMargin = AndroidUtilities.dp(12);
-        layout.addView(tv, p);
+        p.topMargin = dp(14);
+        root.addView(tv, p);
         return tv;
     }
 
-    private EditText addEditText(LinearLayout layout, Context ctx, String hint, String value, int inputType) {
+    private EditText editText(LinearLayout root, Context ctx, String hint, String val, int type) {
         EditText et = new EditText(ctx);
-        et.setHint(hint);
-        et.setText(value);
-        et.setInputType(inputType);
+        et.setHint(hint); et.setText(val); et.setInputType(type);
         et.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
         et.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText));
+        et.setTextSize(14);
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2);
-        p.topMargin = AndroidUtilities.dp(8);
-        layout.addView(et, p);
+        p.topMargin = dp(10);
+        root.addView(et, p);
         return et;
     }
 
-    private TextView addClickableText(LinearLayout layout, Context ctx, String text) {
+    private TextView clickable(LinearLayout root, Context ctx, String text, View.OnClickListener click) {
         TextView tv = new TextView(ctx);
-        tv.setText(text);
-        tv.setTextSize(14);
+        tv.setText(text); tv.setTextSize(15);
         tv.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText));
-        tv.setPadding(0, AndroidUtilities.dp(8), 0, AndroidUtilities.dp(8));
+        tv.setPadding(0, dp(10), 0, dp(10));
+        tv.setOnClickListener(click);
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2);
-        p.topMargin = AndroidUtilities.dp(4);
-        layout.addView(tv, p);
+        p.topMargin = dp(4);
+        root.addView(tv, p);
         return tv;
     }
 
-    private void addDivider(LinearLayout layout, Context ctx) {
-        View divider = new View(ctx);
-        divider.setBackgroundColor(Theme.getColor(Theme.key_divider));
+    private void divider(LinearLayout root, Context ctx) {
+        View v = new View(ctx);
+        v.setBackgroundColor(Theme.getColor(Theme.key_divider));
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, 1);
-        p.topMargin = AndroidUtilities.dp(12);
-        p.bottomMargin = AndroidUtilities.dp(4);
-        layout.addView(divider, p);
+        p.topMargin = dp(14); p.bottomMargin = dp(6);
+        root.addView(v, p);
     }
 
-    private android.content.SharedPreferences getPrefs(Context ctx) {
-        return ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-    }
+    private int dp(int v) { return AndroidUtilities.dp(v); }
+    private android.content.SharedPreferences prefs(Context c) { return c.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE); }
 }
