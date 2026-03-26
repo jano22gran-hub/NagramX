@@ -11,9 +11,9 @@ public class SessionBackupUI {
     public static void showBackupDialog(Activity activity) {
         AlertDialog.Builder b = new AlertDialog.Builder(activity);
         b.setTitle(LocaleController.getString("SessionBackup", 
-            tw.nekomimi.nekogram.R.string.SessionBackup));
+            org.telegram.messenger.R.string.SessionBackup));
         b.setMessage(LocaleController.getString("SessionBackup_desc",
-            tw.nekomimi.nekogram.R.string.SessionBackup_desc));
+            org.telegram.messenger.R.string.SessionBackup_desc));
         b.setPositiveButton(LocaleController.getString("OK",
             org.telegram.messenger.R.string.OK), (d, w) -> {
             SessionBackupHelper.pickFolder(activity);
