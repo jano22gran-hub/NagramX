@@ -41,10 +41,10 @@ public class ForwarderChatButton {
         args.putBoolean("allowGlobalSearch", true);
 
         DialogsActivity dialogsActivity = new DialogsActivity(args);
-        dialogsActivity.setDelegate((parentFragment, dialogs, message, param, notify, scheduleDate, topicsFragment) -> {
-            if (dialogs == null || dialogs.isEmpty()) return false;
+        dialogsActivity.setDelegate((parentFragment, dids, message, param, notify, scheduleDate, scheduleRepeatPeriod, topicsFragment) -> {
+            if (dids == null || dids.isEmpty()) return false;
 
-            long targetId = dialogs.get(0).dialogId;
+            long targetId = dids.get(0).dialogId;
 
             if (sourceId == targetId) {
                 Toast.makeText(fragment.getParentActivity(),
@@ -176,9 +176,9 @@ public class ForwarderChatButton {
             args.putBoolean("onlySelect", true);
             args.putInt("dialogsType", 0);
             DialogsActivity da = new DialogsActivity(args);
-            da.setDelegate((pf, dialogs, msg, param, notify, sd, tf) -> {
-                if (dialogs == null || dialogs.isEmpty()) return false;
-                ids[0] = dialogs.get(0).dialogId;
+            da.setDelegate((pf, dids, msg, param, notify, sd, srp, tf) -> {
+                if (dids == null || dids.isEmpty()) return false;
+                ids[0] = dids.get(0).dialogId;
                 pf.finishFragment();
                 AndroidUtilities.runOnUIThread(() -> showConfirmDialog(fragment, ids[0], ids[1]));
                 return true;
@@ -193,9 +193,9 @@ public class ForwarderChatButton {
             args.putBoolean("onlySelect", true);
             args.putInt("dialogsType", 0);
             DialogsActivity da = new DialogsActivity(args);
-            da.setDelegate((pf, dialogs, msg, param, notify, sd, tf) -> {
-                if (dialogs == null || dialogs.isEmpty()) return false;
-                ids[1] = dialogs.get(0).dialogId;
+            da.setDelegate((pf, dids, msg, param, notify, sd, srp, tf) -> {
+                if (dids == null || dids.isEmpty()) return false;
+                ids[1] = dids.get(0).dialogId;
                 if (ids[0] == ids[1]) {
                     android.widget.Toast.makeText(ctx,
                         "المصدر والهدف لا يمكن أن يكونا نفس الدردشة",
