@@ -1,6 +1,7 @@
 package org.telegram.messenger.NagramX.forwarder;
 
 import android.content.Context;
+import android.os.Environment;
 import android.util.Log;
 
 import org.telegram.messenger.ApplicationLoader;
@@ -25,20 +26,14 @@ import android.database.Cursor;
 import android.content.ContentValues;
 
 /**
- * ForwarderHashDatabase — Singleton
+ * ForwarderHashDatabase — v2.0
  *
- * قاعدة بيانات مستقلة لتخزين هاشات الوسائط المُحوَّلة.
- * الغرض: منع تكرار التحويل عبر جلسات متعددة.
- *
- * الملف: getFilesDir()/NagramX/forwarder_hashes.db
- *
- * الإصلاحات المطبقة:
- * ✅ Singleton pattern — instance واحد فقط
- * ✅ Thread-safe LRU — get() بدل containsKey()
- * ✅ try-with-resources للـ Cursors
- * ✅ importFromJson — استيراد متوافق مع plugin Python
- * ✅ JSON escaping في التصدير
- * ✅ preloadToCache — إصلاح iterator.remove()
+ * إصلاحات شاملة:
+ * ✅ DB: يستخدم getDatabasePath — يمنع خطأ "تالفة"
+ * ✅ تصدير/استيراد: Android/media/{package}/ForwarderPro/
+ * ✅ منع التكرار يعمل — cache + DB
+ * ✅ صيانة: vacuum, integrity, repair hash_type
+ * ✅ إحصائيات مفصلة بتوزيع الأنواع
  */
 public class ForwarderHashDatabase {
 
@@ -46,9 +41,6 @@ public class ForwarderHashDatabase {
     private static final String DB_NAME = "forwarder_hashes.db";
     private static final int DB_VERSION = 1;
 
-    // ==========================================
-    // Singleton
-    // ==========================================
     private static volatile ForwarderHashDatabase instance;
     private static final Object INSTANCE_LOCK = new Object();
 
@@ -63,9 +55,6 @@ public class ForwarderHashDatabase {
         return instance;
     }
 
-    // ==========================================
-    // LRU Cache — O(1) للفحص بدون SQL
-    // ==========================================
     private static final int CACHE_MAX_SIZE = 18_000;
     private final LinkedHashMap<String, Long> localCache = new LinkedHashMap<String, Long>(256, 0.75f, true) {
         @Override
@@ -75,9 +64,6 @@ public class ForwarderHashDatabase {
     };
     private final ReentrantLock cacheLock = new ReentrantLock();
 
-    // ==========================================
-    // Batch write queue
-    // ==========================================
     private static final int BATCH_SIZE = 50;
     private final List<String[]> pendingWrites = new ArrayList<>();
     private final ReentrantLock writeLock = new ReentrantLock();
@@ -90,13 +76,11 @@ public class ForwarderHashDatabase {
     private final AtomicBoolean corrupted = new AtomicBoolean(false);
     private DbHelper dbHelper;
     private final String dbPath;
+    private final String mediaDir;
 
-    // ==========================================
-    // SQLiteOpenHelper
-    // ==========================================
     private static class DbHelper extends SQLiteOpenHelper {
-        DbHelper(Context ctx, String path) {
-            super(ctx, path, null, DB_VERSION);
+        DbHelper(Context ctx) {
+            super(ctx, DB_NAME, null, DB_VERSION);
         }
 
         @Override
@@ -115,144 +99,106 @@ public class ForwarderHashDatabase {
         @Override
         public void onOpen(SQLiteDatabase db) {
             super.onOpen(db);
-            db.execSQL("PRAGMA journal_mode=WAL");
-            db.execSQL("PRAGMA synchronous=NORMAL");
-            db.execSQL("PRAGMA cache_size=10000");
+            try {
+                db.execSQL("PRAGMA journal_mode=WAL");
+                db.execSQL("PRAGMA synchronous=NORMAL");
+                db.execSQL("PRAGMA cache_size=10000");
+            } catch (Exception e) {
+                Log.w("ForwarderHashDB", "PRAGMA: " + e.getMessage());
+            }
         }
 
         @Override
-        public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-            // مستقبلاً: migrations
-        }
+        public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {}
     }
 
-    // ==========================================
-    // Constructor — private لأنه Singleton
-    // ==========================================
     private ForwarderHashDatabase() {
         Context ctx = ApplicationLoader.applicationContext;
-        File dir = new File(ctx.getFilesDir(), "NagramX");
-        //noinspection ResultOfMethodCallIgnored
-        dir.mkdirs();
-        dbPath = new File(dir, DB_NAME).getAbsolutePath();
-        dbHelper = new DbHelper(ctx, dbPath);
+        dbHelper = new DbHelper(ctx);
+        dbPath = ctx.getDatabasePath(DB_NAME).getAbsolutePath();
+
+        String pkg = ctx.getPackageName();
+        File mediaBase = new File(Environment.getExternalStorageDirectory(),
+            "Android/media/" + pkg + "/ForwarderPro");
+        mediaBase.mkdirs();
+        mediaDir = mediaBase.getAbsolutePath();
 
         try {
-            dbHelper.getWritableDatabase();
-            Log.i(TAG, "DB جاهز: " + dbPath);
+            SQLiteDatabase db = dbHelper.getWritableDatabase();
+            if (db != null && db.isOpen()) {
+                Log.i(TAG, "✅ DB: " + dbPath);
+            } else {
+                corrupted.set(true);
+            }
         } catch (Exception e) {
-            Log.e(TAG, "فشل فتح DB: " + e.getMessage());
+            Log.e(TAG, "❌ DB: " + e.getMessage());
             corrupted.set(true);
         }
     }
 
-    // ==========================================
-    // preloadToCache — تحميل كل الهاشات للذاكرة
-    // ✅ إصلاح: استخدام clear() بدل iterator.remove() المتكرر
-    // ==========================================
+    public String getMediaDir() { return mediaDir; }
+    public boolean isCorrupted() { return corrupted.get(); }
+    public ExecutorService getBgWriter() { return bgWriter; }
+
     public int preloadToCache() {
         if (corrupted.get()) return 0;
         int count = 0;
         try {
             SQLiteDatabase db = dbHelper.getReadableDatabase();
-            try (Cursor cursor = db.rawQuery("SELECT hash FROM hashes", null)) {
-                List<String> allHashes = new ArrayList<>();
-                while (cursor.moveToNext()) {
-                    String hash = cursor.getString(0);
-                    if (hash != null) {
-                        allHashes.add(hash);
-                    }
-                }
+            try (Cursor cursor = db.rawQuery("SELECT hash FROM hashes ORDER BY timestamp DESC LIMIT " + CACHE_MAX_SIZE, null)) {
                 cacheLock.lock();
                 try {
                     localCache.clear();
-                    // لو عدد الهاشات أكبر من الحد، نأخذ فقط الأحدث
-                    int start = Math.max(0, allHashes.size() - CACHE_MAX_SIZE);
-                    for (int i = start; i < allHashes.size(); i++) {
-                        localCache.put(allHashes.get(i), 0L);
-                        count++;
+                    while (cursor.moveToNext()) {
+                        String h = cursor.getString(0);
+                        if (h != null) { localCache.put(h, 0L); count++; }
                     }
-                } finally {
-                    cacheLock.unlock();
-                }
+                } finally { cacheLock.unlock(); }
             }
-            Log.i(TAG, "preload: " + count + " هاش في الذاكرة");
         } catch (Exception e) {
-            Log.w(TAG, "preload فشل: " + e.getMessage());
+            Log.w(TAG, "preload: " + e.getMessage());
         }
         return count;
     }
 
-    // ==========================================
-    // isDuplicate — الفحص الرئيسي
-    // ✅ إصلاح: get() بدل containsKey() لتجنب مشاكل access-order
-    // ==========================================
     public boolean isDuplicate(String hash) {
-        if (hash == null || hash.length() <= 10) return false;
-        if (corrupted.get()) return false;
-
-        // فحص الـ cache أولاً
+        if (hash == null || hash.length() <= 10 || corrupted.get()) return false;
         cacheLock.lock();
         try {
             if (localCache.get(hash) != null) return true;
-        } finally {
-            cacheLock.unlock();
-        }
+        } finally { cacheLock.unlock(); }
 
-        // fallback إلى SQL
         try {
             SQLiteDatabase db = dbHelper.getReadableDatabase();
-            try (Cursor cursor = db.rawQuery(
-                "SELECT 1 FROM hashes WHERE hash=? LIMIT 1",
-                new String[]{hash}
-            )) {
-                boolean found = cursor.moveToFirst();
+            try (Cursor c = db.rawQuery("SELECT 1 FROM hashes WHERE hash=? LIMIT 1", new String[]{hash})) {
+                boolean found = c.moveToFirst();
                 if (found) {
                     cacheLock.lock();
-                    try {
-                        localCache.put(hash, System.currentTimeMillis());
-                    } finally {
-                        cacheLock.unlock();
-                    }
+                    try { localCache.put(hash, System.currentTimeMillis()); }
+                    finally { cacheLock.unlock(); }
                 }
                 return found;
             }
-        } catch (Exception e) {
-            Log.w(TAG, "isDuplicate خطأ: " + e.getMessage());
-            return false;
-        }
+        } catch (Exception e) { return false; }
     }
 
-    // ==========================================
-    // addHash — إضافة هاش (batch للأداء)
-    // ==========================================
     public void addHash(String hash, String hashType) {
-        if (hash == null || hash.length() <= 10) return;
-        if (corrupted.get()) return;
-
+        if (hash == null || hash.length() <= 10 || corrupted.get()) return;
         cacheLock.lock();
-        try {
-            localCache.put(hash, System.currentTimeMillis());
-        } finally {
-            cacheLock.unlock();
-        }
+        try { localCache.put(hash, System.currentTimeMillis()); }
+        finally { cacheLock.unlock(); }
 
         writeLock.lock();
         try {
-            pendingWrites.add(new String[]{hash, String.valueOf(System.currentTimeMillis() / 1000), hashType});
+            pendingWrites.add(new String[]{hash, String.valueOf(System.currentTimeMillis() / 1000), hashType != null ? hashType : "unknown"});
             if (pendingWrites.size() >= BATCH_SIZE) {
                 final List<String[]> batch = new ArrayList<>(pendingWrites);
                 pendingWrites.clear();
                 bgWriter.execute(() -> flushBatch(batch));
             }
-        } finally {
-            writeLock.unlock();
-        }
+        } finally { writeLock.unlock(); }
     }
 
-    // ==========================================
-    // flushWrites — تفريغ كل الكتابات المعلقة
-    // ==========================================
     public void flushWrites() {
         List<String[]> batch;
         writeLock.lock();
@@ -260,323 +206,332 @@ public class ForwarderHashDatabase {
             if (pendingWrites.isEmpty()) return;
             batch = new ArrayList<>(pendingWrites);
             pendingWrites.clear();
-        } finally {
-            writeLock.unlock();
-        }
+        } finally { writeLock.unlock(); }
         flushBatch(batch);
     }
 
     private void flushBatch(List<String[]> batch) {
-        if (batch.isEmpty()) return;
-        if (corrupted.get()) return;
-        SQLiteDatabase db = null;
+        if (batch.isEmpty() || corrupted.get()) return;
         try {
-            db = dbHelper.getWritableDatabase();
+            SQLiteDatabase db = dbHelper.getWritableDatabase();
             db.beginTransaction();
             try {
                 for (String[] row : batch) {
                     ContentValues cv = new ContentValues();
                     cv.put("hash", row[0]);
                     cv.put("timestamp", Long.parseLong(row[1]));
-                    cv.put("hash_type", row[2] != null ? row[2] : "unknown");
+                    cv.put("hash_type", row[2]);
                     db.insertWithOnConflict("hashes", null, cv, SQLiteDatabase.CONFLICT_IGNORE);
                 }
                 db.setTransactionSuccessful();
-            } finally {
-                db.endTransaction();
-            }
+            } finally { db.endTransaction(); }
         } catch (Exception e) {
-            Log.w(TAG, "flushBatch خطأ: " + e.getMessage());
-            if (e.getMessage() != null && (
-                e.getMessage().contains("disk image is malformed") ||
-                e.getMessage().contains("file is not a database")
-            )) {
-                corrupted.set(true);
-                Log.e(TAG, "DB تالف — تم إيقاف الكتابة");
-            }
+            Log.w(TAG, "flush: " + e.getMessage());
+            if (e.getMessage() != null && e.getMessage().contains("malformed")) corrupted.set(true);
         }
     }
 
-    // ==========================================
-    // getStats — إحصائيات
-    // ✅ إصلاح: try-with-resources لكل Cursor
-    // ==========================================
     public ForwarderStats getStats() {
-        ForwarderStats stats = new ForwarderStats();
-        stats.dbPath = dbPath;
-        stats.corrupted = corrupted.get();
+        ForwarderStats s = new ForwarderStats();
+        s.dbPath = dbPath;
+        s.exportPath = mediaDir;
+        s.corrupted = corrupted.get();
 
         cacheLock.lock();
-        try {
-            stats.cacheSize = localCache.size();
-        } finally {
-            cacheLock.unlock();
-        }
-
+        try { s.cacheSize = localCache.size(); } finally { cacheLock.unlock(); }
         writeLock.lock();
-        try {
-            stats.pendingWrites = pendingWrites.size();
-        } finally {
-            writeLock.unlock();
-        }
+        try { s.pendingWrites = pendingWrites.size(); } finally { writeLock.unlock(); }
 
         File f = new File(dbPath);
-        stats.dbSizeBytes = f.exists() ? f.length() : 0;
+        s.dbSizeBytes = f.exists() ? f.length() : 0;
         File wal = new File(dbPath + "-wal");
-        if (wal.exists()) stats.dbSizeBytes += wal.length();
+        if (wal.exists()) s.dbSizeBytes += wal.length();
 
         if (!corrupted.get()) {
             try {
                 SQLiteDatabase db = dbHelper.getReadableDatabase();
-                try (Cursor c1 = db.rawQuery("SELECT COUNT(*) FROM hashes", null)) {
-                    if (c1.moveToFirst()) stats.totalHashes = c1.getLong(0);
+                try (Cursor c = db.rawQuery("SELECT COUNT(*) FROM hashes", null)) {
+                    if (c.moveToFirst()) s.totalHashes = c.getLong(0);
                 }
-                try (Cursor c2 = db.rawQuery("SELECT MIN(timestamp), MAX(timestamp) FROM hashes", null)) {
-                    if (c2.moveToFirst()) {
-                        long minTs = c2.getLong(0);
-                        if (minTs > 0) {
-                            stats.oldestHashDays = (System.currentTimeMillis() / 1000 - minTs) / 86400.0;
-                        }
+                try (Cursor c = db.rawQuery("SELECT MIN(timestamp), MAX(timestamp) FROM hashes", null)) {
+                    if (c.moveToFirst()) {
+                        long min = c.getLong(0), max = c.getLong(1);
+                        if (min > 0) s.oldestHashDays = (System.currentTimeMillis() / 1000.0 - min) / 86400.0;
+                        if (max > 0) s.newestHashDays = (System.currentTimeMillis() / 1000.0 - max) / 86400.0;
                     }
                 }
-            } catch (Exception e) {
-                Log.w(TAG, "getStats خطأ: " + e.getMessage());
-            }
+                try (Cursor c = db.rawQuery("SELECT hash_type, COUNT(*) FROM hashes GROUP BY hash_type ORDER BY COUNT(*) DESC", null)) {
+                    s.hashTypeBreakdown = new ArrayList<>();
+                    while (c.moveToNext()) s.hashTypeBreakdown.add(new String[]{c.getString(0), String.valueOf(c.getLong(1))});
+                }
+                try (Cursor c = db.rawQuery("PRAGMA integrity_check", null)) {
+                    if (c.moveToFirst()) s.integrityOk = "ok".equals(c.getString(0));
+                }
+                try (Cursor c = db.rawQuery("PRAGMA journal_mode", null)) {
+                    if (c.moveToFirst()) s.journalMode = c.getString(0);
+                }
+            } catch (Exception e) { Log.w(TAG, "stats: " + e.getMessage()); }
         }
-        return stats;
+        return s;
     }
 
-    // ==========================================
-    // clearAll — مسح كل الهاشات
-    // ==========================================
     public long clearAll() {
         cacheLock.lock();
-        try {
-            localCache.clear();
-        } finally {
-            cacheLock.unlock();
-        }
+        try { localCache.clear(); } finally { cacheLock.unlock(); }
         if (corrupted.get()) return 0;
         try {
             SQLiteDatabase db = dbHelper.getWritableDatabase();
             long count = 0;
-            try (Cursor cursor = db.rawQuery("SELECT COUNT(*) FROM hashes", null)) {
-                if (cursor.moveToFirst()) count = cursor.getLong(0);
+            try (Cursor c = db.rawQuery("SELECT COUNT(*) FROM hashes", null)) {
+                if (c.moveToFirst()) count = c.getLong(0);
             }
             db.execSQL("DELETE FROM hashes");
-            Log.i(TAG, "تم مسح " + count + " هاش");
             return count;
-        } catch (Exception e) {
-            Log.e(TAG, "clearAll خطأ: " + e.getMessage());
-            return 0;
-        }
+        } catch (Exception e) { return 0; }
     }
 
-    // ==========================================
-    // exportToJson — تصدير لملف JSON
-    // ✅ إصلاح: JSON escaping
-    // ==========================================
-    public boolean exportToJson(File outputFile) {
-        if (corrupted.get()) return false;
+    public String exportToJson() {
+        if (corrupted.get()) return null;
         try {
+            File dir = new File(mediaDir);
+            if (!dir.exists()) dir.mkdirs();
+            File out = new File(dir, "forwarder_hashes_" + System.currentTimeMillis() + ".json");
+
             SQLiteDatabase db = dbHelper.getReadableDatabase();
-            try (Cursor cursor = db.rawQuery("SELECT hash, timestamp, hash_type FROM hashes", null)) {
-                StringBuilder sb = new StringBuilder();
-                sb.append("{\"version\":\"NagramX\",\"export_time\":")
-                  .append(System.currentTimeMillis() / 1000)
-                  .append(",\"hashes\":[");
+            long total = 0;
+            try (Cursor cc = db.rawQuery("SELECT COUNT(*) FROM hashes", null)) {
+                if (cc.moveToFirst()) total = cc.getLong(0);
+            }
+
+            try (Cursor cursor = db.rawQuery("SELECT hash, timestamp, hash_type FROM hashes", null);
+                 FileWriter fw = new FileWriter(out)) {
+                fw.write("{\"version\":\"NagramX-ForwarderPro\",\"export_time\":");
+                fw.write(String.valueOf(System.currentTimeMillis() / 1000));
+                fw.write(",\"total_hashes\":");
+                fw.write(String.valueOf(total));
+                fw.write(",\"hashes\":[");
                 boolean first = true;
                 while (cursor.moveToNext()) {
-                    if (!first) sb.append(",");
-                    sb.append("{\"hash\":\"").append(escapeJson(cursor.getString(0)))
-                      .append("\",\"timestamp\":").append(cursor.getLong(1))
-                      .append(",\"hash_type\":\"").append(escapeJson(cursor.getString(2))).append("\"}");
+                    if (!first) fw.write(",");
+                    fw.write("{\"hash\":\""); fw.write(esc(cursor.getString(0)));
+                    fw.write("\",\"timestamp\":"); fw.write(String.valueOf(cursor.getLong(1)));
+                    fw.write(",\"hash_type\":\""); fw.write(esc(cursor.getString(2)));
+                    fw.write("\"}");
                     first = false;
                 }
-                sb.append("]}");
-                try (FileWriter fw = new FileWriter(outputFile)) {
-                    fw.write(sb.toString());
-                }
+                fw.write("]}");
             }
-            Log.i(TAG, "تم التصدير: " + outputFile.getAbsolutePath());
-            return true;
+            return out.getAbsolutePath();
         } catch (Exception e) {
-            Log.e(TAG, "exportToJson خطأ: " + e.getMessage());
-            return false;
+            Log.e(TAG, "export: " + e.getMessage(), e);
+            return null;
         }
     }
 
-    // ==========================================
-    // importFromJson — استيراد من ملف JSON
-    // ✅ جديد: متوافق مع صيغة plugin Python
-    // ==========================================
-    public int importFromJson(File inputFile) {
-        if (corrupted.get()) return 0;
-        if (inputFile == null || !inputFile.exists()) return 0;
+    public List<File> findImportFiles() {
+        List<File> files = new ArrayList<>();
+        scanDir(new File(mediaDir), files);
+        File dl = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+        if (dl != null) scanDir(dl, files);
+        File old = new File(Environment.getExternalStorageDirectory(), "ForwarderPro_State");
+        if (old.exists()) scanDir(old, files);
+        return files;
+    }
 
+    private void scanDir(File dir, List<File> result) {
+        if (dir == null || !dir.exists() || !dir.isDirectory()) return;
+        File[] ff = dir.listFiles((d, n) -> n.endsWith(".json") && (n.contains("hashes") || n.contains("forwarder") || n.contains("export")));
+        if (ff != null) for (File f : ff) result.add(f);
+    }
+
+    public int importFromJson(File inputFile) {
+        if (corrupted.get() || inputFile == null || !inputFile.exists()) return 0;
         int added = 0;
         try {
-            // قراءة الملف
             StringBuilder sb = new StringBuilder();
             try (BufferedReader br = new BufferedReader(new FileReader(inputFile))) {
-                String line;
-                while ((line = br.readLine()) != null) {
-                    sb.append(line);
-                }
+                String line; while ((line = br.readLine()) != null) sb.append(line);
             }
-
             String json = sb.toString().trim();
+            int hs = json.indexOf("\"hashes\"");
+            if (hs == -1) return 0;
+            int as = json.indexOf('[', hs);
+            if (as == -1) return 0;
+            int ae = json.lastIndexOf(']');
+            if (ae <= as) return 0;
+            String section = json.substring(as + 1, ae);
 
-            // استخراج الهاشات — parser بسيط بدون مكتبة خارجية
-            // نبحث عن كل {"hash":"...","timestamp":...,"hash_type":"..."} داخل "hashes":[...]
-            int hashesStart = json.indexOf("\"hashes\"");
-            if (hashesStart == -1) return 0;
-
-            int arrayStart = json.indexOf('[', hashesStart);
-            if (arrayStart == -1) return 0;
-
-            int arrayEnd = json.lastIndexOf(']');
-            if (arrayEnd == -1 || arrayEnd <= arrayStart) return 0;
-
-            String hashesSection = json.substring(arrayStart + 1, arrayEnd);
-
-            // استخراج كل object
-            int pos = 0;
             SQLiteDatabase db = dbHelper.getWritableDatabase();
             db.beginTransaction();
             try {
-                while (pos < hashesSection.length()) {
-                    int objStart = hashesSection.indexOf('{', pos);
-                    if (objStart == -1) break;
-                    int objEnd = hashesSection.indexOf('}', objStart);
-                    if (objEnd == -1) break;
+                int pos = 0;
+                while (pos < section.length()) {
+                    int os2 = section.indexOf('{', pos);
+                    if (os2 == -1) break;
+                    int oe = section.indexOf('}', os2);
+                    if (oe == -1) break;
+                    String obj = section.substring(os2, oe + 1);
+                    pos = oe + 1;
 
-                    String obj = hashesSection.substring(objStart, objEnd + 1);
-                    pos = objEnd + 1;
-
-                    // استخراج القيم
-                    String hash = extractJsonString(obj, "hash");
-                    String hashType = extractJsonString(obj, "hash_type");
-                    long timestamp = extractJsonLong(obj, "timestamp");
-
+                    String hash = xStr(obj, "hash");
+                    String ht = xStr(obj, "hash_type");
+                    long ts = xLong(obj, "timestamp");
                     if (hash == null || hash.length() <= 10) continue;
-                    if (hashType == null) hashType = "imported";
-                    if (timestamp == 0) timestamp = System.currentTimeMillis() / 1000;
+                    if (ht == null) ht = "imported";
+                    if (ts == 0) ts = System.currentTimeMillis() / 1000;
 
-                    // فحص إذا موجود
-                    boolean exists = false;
-                    try (Cursor c = db.rawQuery("SELECT 1 FROM hashes WHERE hash=? LIMIT 1", new String[]{hash})) {
-                        exists = c.moveToFirst();
-                    }
-
-                    if (!exists) {
-                        ContentValues cv = new ContentValues();
-                        cv.put("hash", hash);
-                        cv.put("timestamp", timestamp);
-                        cv.put("hash_type", hashType);
-                        db.insertWithOnConflict("hashes", null, cv, SQLiteDatabase.CONFLICT_IGNORE);
+                    ContentValues cv = new ContentValues();
+                    cv.put("hash", hash); cv.put("timestamp", ts); cv.put("hash_type", ht);
+                    long r = db.insertWithOnConflict("hashes", null, cv, SQLiteDatabase.CONFLICT_IGNORE);
+                    if (r != -1) {
                         added++;
-
-                        // أضف للـ cache
                         cacheLock.lock();
-                        try {
-                            localCache.put(hash, timestamp);
-                        } finally {
-                            cacheLock.unlock();
-                        }
+                        try { localCache.put(hash, ts); } finally { cacheLock.unlock(); }
                     }
                 }
                 db.setTransactionSuccessful();
-            } finally {
-                db.endTransaction();
-            }
-
-            Log.i(TAG, "تم استيراد " + added + " هاش من " + inputFile.getName());
-        } catch (Exception e) {
-            Log.e(TAG, "importFromJson خطأ: " + e.getMessage());
-        }
+            } finally { db.endTransaction(); }
+        } catch (Exception e) { Log.e(TAG, "import: " + e.getMessage()); }
         return added;
     }
 
-    // ==========================================
-    // JSON Helpers — بسيط بدون مكتبة خارجية
-    // ==========================================
-    private static String extractJsonString(String json, String key) {
-        String search = "\"" + key + "\":\"";
-        int start = json.indexOf(search);
-        if (start == -1) return null;
-        start += search.length();
-        int end = json.indexOf('"', start);
-        if (end == -1) return null;
-        return json.substring(start, end);
-    }
-
-    private static long extractJsonLong(String json, String key) {
-        String search = "\"" + key + "\":";
-        int start = json.indexOf(search);
-        if (start == -1) return 0;
-        start += search.length();
-        StringBuilder num = new StringBuilder();
-        for (int i = start; i < json.length(); i++) {
-            char c = json.charAt(i);
-            if (c >= '0' && c <= '9') num.append(c);
-            else if (num.length() > 0) break;
-        }
+    public RepairResult repairDatabase() {
+        RepairResult r = new RepairResult();
+        if (corrupted.get()) { r.error = "DB corrupted"; return r; }
         try {
-            return Long.parseLong(num.toString());
-        } catch (Exception e) {
-            return 0;
-        }
+            SQLiteDatabase db = dbHelper.getWritableDatabase();
+            try (Cursor c = db.rawQuery("SELECT hash FROM hashes WHERE hash_type='unknown' OR hash_type IS NULL", null)) {
+                List<String[]> fixes = new ArrayList<>();
+                while (c.moveToNext()) {
+                    String h = c.getString(0);
+                    String t = inferHashType(h);
+                    if (!"unknown".equals(t)) fixes.add(new String[]{t, h});
+                }
+                if (!fixes.isEmpty()) {
+                    db.beginTransaction();
+                    try {
+                        for (String[] fix : fixes) db.execSQL("UPDATE hashes SET hash_type=? WHERE hash=?", fix);
+                        db.setTransactionSuccessful();
+                        r.fixedTypes = fixes.size();
+                    } finally { db.endTransaction(); }
+                }
+            }
+            try (Cursor c = db.rawQuery("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_hash'", null)) {
+                if (c.moveToFirst()) { db.execSQL("DROP INDEX IF EXISTS idx_hash"); r.removedDuplicateIndex = true; }
+            }
+            File bf = new File(dbPath);
+            r.sizeBefore = bf.exists() ? bf.length() : 0;
+            try { db.execSQL("VACUUM"); r.vacuumed = true; } catch (Exception ignored) {}
+            File af = new File(dbPath);
+            r.sizeAfter = af.exists() ? af.length() : 0;
+            r.success = true;
+        } catch (Exception e) { r.error = e.getMessage(); }
+        return r;
     }
 
-    private static String escapeJson(String s) {
-        if (s == null) return "";
-        return s.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
+    public int cleanupLegacyHashes() {
+        if (corrupted.get()) return 0;
+        try {
+            SQLiteDatabase db = dbHelper.getWritableDatabase();
+            int deleted = 0;
+            for (String type : new String[]{"legacy_fp", "legacy_numeric_id", "unknown"}) {
+                try (Cursor c = db.rawQuery("SELECT COUNT(*) FROM hashes WHERE hash_type=?", new String[]{type})) {
+                    if (c.moveToFirst() && c.getInt(0) > 0) {
+                        db.execSQL("DELETE FROM hashes WHERE hash_type=?", new String[]{type});
+                        deleted += c.getInt(0);
+                    }
+                }
+            }
+            db.execSQL("DELETE FROM hashes WHERE hash_type IS NULL");
+            if (deleted > 0) try { db.execSQL("VACUUM"); } catch (Exception ignored) {}
+            return deleted;
+        } catch (Exception e) { return 0; }
     }
 
-    // ==========================================
-    // getBgWriter + close
-    // ==========================================
-    public ExecutorService getBgWriter() {
-        return bgWriter;
+    public static String inferHashType(String hash) {
+        if (hash == null) return "unknown";
+        if (hash.startsWith("DOC_REF|")) return "document_ref";
+        if (hash.startsWith("PHOTO_REF|")) return "photo_ref";
+        if (hash.startsWith("DOC_LEGACY|")) return "document_legacy";
+        if (hash.startsWith("PHOTO_LEGACY|")) return "photo_legacy";
+        if (hash.startsWith("DOC_OLD|")) return "document_old";
+        if (hash.startsWith("PHOTO_OLD|")) return "photo_old";
+        if (hash.startsWith("UID:")) return "document_unique";
+        if (hash.startsWith("STRICT_FB|")) return "strict_fb";
+        if (hash.startsWith("STORY|")) return "story";
+        if (hash.startsWith("MSGID|")) return "msgid_fallback";
+        if (hash.startsWith("FAST_UNIQ|")) return "fast_unique";
+        if (hash.startsWith("FALLBACK_DOC|")) return "fallback_doc";
+        if (hash.startsWith("FALLBACK_PHOTO|")) return "fallback_photo";
+        if (hash.startsWith("FALLBACK_GEN|")) return "fallback_gen";
+        if (hash.startsWith("FALLBACK_TEXT|")) return "fallback_text";
+        if (hash.startsWith("FP:")) return "legacy_fp";
+        if (hash.length() == 32 && hash.matches("[0-9a-f]+")) return "content_doc";
+        return "unknown";
     }
 
     public void close() {
-        bgWriter.execute(this::flushWrites);
+        try { flushWrites(); } catch (Exception ignored) {}
         bgWriter.shutdown();
-        try {
-            bgWriter.awaitTermination(3, TimeUnit.SECONDS);
-        } catch (InterruptedException ignored) {}
-        try {
-            dbHelper.close();
-        } catch (Exception ignored) {}
-        Log.i(TAG, "DB أُغلق بأمان");
-        // Reset singleton عند الإغلاق
-        synchronized (INSTANCE_LOCK) {
-            instance = null;
+        try { bgWriter.awaitTermination(3, TimeUnit.SECONDS); } catch (InterruptedException ignored) {}
+        try { dbHelper.close(); } catch (Exception ignored) {}
+        synchronized (INSTANCE_LOCK) { instance = null; }
+    }
+
+    private static String xStr(String j, String k) {
+        String s = "\"" + k + "\":\"";
+        int i = j.indexOf(s);
+        if (i == -1) return null;
+        i += s.length();
+        int e = j.indexOf('"', i);
+        return e == -1 ? null : j.substring(i, e);
+    }
+
+    private static long xLong(String j, String k) {
+        String s = "\"" + k + "\":";
+        int i = j.indexOf(s);
+        if (i == -1) return 0;
+        i += s.length();
+        StringBuilder n = new StringBuilder();
+        for (; i < j.length(); i++) {
+            char c = j.charAt(i);
+            if (c >= '0' && c <= '9') n.append(c);
+            else if (n.length() > 0) break;
+        }
+        try { return Long.parseLong(n.toString()); } catch (Exception e) { return 0; }
+    }
+
+    private static String esc(String s) {
+        if (s == null) return "";
+        return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
+    }
+
+    public static class ForwarderStats {
+        public long totalHashes, cacheSize, dbSizeBytes;
+        public double oldestHashDays, newestHashDays;
+        public int pendingWrites;
+        public boolean corrupted, integrityOk = true;
+        public String dbPath, exportPath, journalMode;
+        public List<String[]> hashTypeBreakdown;
+
+        public String formatSize() {
+            if (dbSizeBytes >= 1048576) return String.format("%.1f MB", dbSizeBytes / 1048576.0);
+            if (dbSizeBytes >= 1024) return String.format("%.1f KB", dbSizeBytes / 1024.0);
+            return dbSizeBytes + " B";
         }
     }
 
-    // ==========================================
-    // Data class
-    // ==========================================
-    public static class ForwarderStats {
-        public long totalHashes;
-        public long cacheSize;
-        public long dbSizeBytes;
-        public double oldestHashDays;
-        public int pendingWrites;
-        public boolean corrupted;
-        public String dbPath;
+    public static class RepairResult {
+        public boolean success, removedDuplicateIndex, vacuumed;
+        public int fixedTypes;
+        public long sizeBefore, sizeAfter;
+        public String error;
 
-        public String formatSize() {
-            if (dbSizeBytes >= 1024 * 1024) return String.format("%.1f MB", dbSizeBytes / (1024.0 * 1024));
-            if (dbSizeBytes >= 1024) return String.format("%.1f KB", dbSizeBytes / 1024.0);
-            return dbSizeBytes + " B";
+        public String formatSaved() {
+            long saved = Math.max(0, sizeBefore - sizeAfter);
+            if (saved >= 1048576) return String.format("%.1f MB", saved / 1048576.0);
+            if (saved >= 1024) return String.format("%.1f KB", saved / 1024.0);
+            return saved + " B";
         }
     }
 }
