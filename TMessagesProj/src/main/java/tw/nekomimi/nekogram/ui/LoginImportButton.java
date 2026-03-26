@@ -15,7 +15,7 @@ public class LoginImportButton {
     public static View createImportButton(Context context, Activity activity) {
         TextView btn = new TextView(context);
         btn.setText(LocaleController.getString("ImportSessionLogin",
-            tw.nekomimi.nekogram.R.string.ImportSessionLogin));
+            org.telegram.messenger.R.string.ImportSessionLogin));
         btn.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText4));
         btn.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, 14);
         btn.setPadding(0, 0, 0, 0);
