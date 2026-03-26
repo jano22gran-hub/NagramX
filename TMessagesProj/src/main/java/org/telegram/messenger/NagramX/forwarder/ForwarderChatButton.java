@@ -218,7 +218,7 @@ public class ForwarderChatButton {
                     // تحديث زر التوقف
                     if (progressDlg[0] != null) {
                         try {
-                            progressDlg[0].getButton(AlertDialog.BUTTON_POSITIVE)
+                            ((android.widget.Button) progressDlg[0].getButton(AlertDialog.BUTTON_POSITIVE))
                                 .setText(isPaused[0] ? "▶️ استمرار" : "⏸ توقف");
                         } catch (Exception ignored) {}
                     }
