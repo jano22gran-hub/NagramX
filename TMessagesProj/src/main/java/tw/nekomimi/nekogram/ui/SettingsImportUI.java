@@ -12,7 +12,7 @@ public class SettingsImportUI {
     public static void showImportDialog(Activity activity) {
         AlertDialog.Builder b = new AlertDialog.Builder(activity);
         b.setTitle(LocaleController.getString("ImportSession",
-            tw.nekomimi.nekogram.R.string.ImportSession));
+            org.telegram.messenger.R.string.ImportSession));
         b.setMessage("استيراد جلسة كحساب ثاني (multi-account)");
         b.setPositiveButton(LocaleController.getString("OK",
             org.telegram.messenger.R.string.OK), (d, w) -> {
