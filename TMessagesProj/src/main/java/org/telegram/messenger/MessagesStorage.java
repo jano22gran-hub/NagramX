@@ -17763,9 +17763,11 @@ public class MessagesStorage extends BaseController {
                     NativeByteBuffer data = cursor.byteBufferValue(0);
                     if (data != null) {
                         message = TLRPC.Message.TLdeserialize(data, data.readInt32(false), false);
-                        message.readAttachPath(data, getUserConfig().clientUserId);
+                        if (message != null) {
+                            message.readAttachPath(data, getUserConfig().clientUserId);
+                        }
                         data.reuse();
-                        if (message.reactions != null && message.reactions.recent_reactions != null) {
+                        if (message != null && message.reactions != null && message.reactions.recent_reactions != null) {
                             for (int i = 0; i < message.reactions.recent_reactions.size(); i++) {
                                 message.reactions.recent_reactions.get(i).unread = false;
                             }

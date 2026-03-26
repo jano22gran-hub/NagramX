@@ -19,6 +19,8 @@ import org.telegram.ui.Components.ViewPagerFixed;
 
 import java.util.ArrayList;
 
+import xyz.nextalone.nagram.NaConfig;
+
 public abstract class ViewPagerActivity extends BaseFragment {
     protected final SparseArray<FragmentState> fragmentsArr = new SparseArray<>();
 
@@ -211,7 +213,7 @@ public abstract class ViewPagerActivity extends BaseFragment {
     @Override
     public void clearViews() {
         if (viewPager != null) {
-            initialFragmentPosition = viewPager.getCurrentPosition();
+            initialFragmentPosition = NaConfig.INSTANCE.getHideBottomNavigationBar().Bool() ? 0 : viewPager.getCurrentPosition();
         }
         for (int a = 0, N = fragmentsArr.size(); a < N; a++) {
             final FragmentState state = fragmentsArr.valueAt(a);

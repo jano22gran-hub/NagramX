@@ -63,6 +63,7 @@ import java.util.List;
 
 import tw.nekomimi.nekogram.NekoConfig;
 import tw.nekomimi.nekogram.helpers.MainTabsHelper;
+import xyz.nextalone.nagram.NaConfig;
 
 public final class BulletinFactory {
 
@@ -1170,7 +1171,7 @@ public final class BulletinFactory {
             return Bulletin.BulletinWindow.make(fragment.getParentActivity(), new Bulletin.Delegate() {
                 @Override
                 public int getBottomOffset(int tag) {
-                    return dp(MainTabsHelper.getMainTabsHeightWithMargins());
+                    return NaConfig.INSTANCE.getHideBottomNavigationBar().Bool() ? 0 : dp(MainTabsHelper.getMainTabsHeightWithMargins());
                 }
             });
         }

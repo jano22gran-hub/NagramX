@@ -15,6 +15,7 @@ import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.app.ActivityManager;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ConfigurationInfo;
@@ -932,6 +933,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         }
 
         if (item.instanceOf(SettingsSearchCell.Factory.class)) {
+            boolean hasRecentSearches = !search.isSearchWas() && search.hasRecentSearches();
             String link = null;
             if (item.object instanceof ProfileActivity.SearchAdapter.SearchResult) {
                 final ProfileActivity.SearchAdapter.SearchResult r = (ProfileActivity.SearchAdapter.SearchResult) item.object;
@@ -940,19 +942,42 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                 final MessagesController.FaqSearchResult r = (MessagesController.FaqSearchResult) item.object;
                 link = r.url;
             }
-            if (!TextUtils.isEmpty(link)) {
-                final String finalLink = link;
-                ItemOptions.makeOptions(this, view)
-                    .add(R.drawable.msg_link2, getString(R.string.CopyLink), () -> {
+            boolean hasLink = !TextUtils.isEmpty(link);
+            if (hasRecentSearches || hasLink) {
+                ItemOptions options = ItemOptions.makeOptions(this, view)
+                    .setScrimViewBackground(listView.getClipBackground(view));
+                if (hasLink) {
+                    final String finalLink = link;
+                    options.add(R.drawable.msg_link2, getString(R.string.CopyLink), () -> {
                         AndroidUtilities.addToClipboard(finalLink);
                         BulletinFactory.of(this).createCopyLinkBulletin().show();
-                    })
-                    .setScrimViewBackground(listView.getClipBackground(view))
-                    .show();
+                    });
+                }
+                if (hasRecentSearches && hasLink) {
+                    options.addGap();
+                }
+                if (hasRecentSearches) {
+                    options.add(R.drawable.msg_delete, getString(R.string.ClearButton), true, this::showClearSearchHistoryDialog);
+                }
+                options.show();
                 return true;
             }
         }
         return false;
+    }
+
+    private void showClearSearchHistoryDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity(), resourceProvider);
+        builder.setTitle(LocaleController.getString(R.string.ClearSearchAlertTitle));
+        builder.setMessage(LocaleController.getString(R.string.ClearSearchAlert));
+        builder.setPositiveButton(LocaleController.getString(R.string.ClearButton), (dialogInterface, i) -> search.clearRecent());
+        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+        AlertDialog dialog = builder.create();
+        showDialog(dialog);
+        TextView button = (TextView) dialog.getButton(DialogInterface.BUTTON_POSITIVE);
+        if (button != null) {
+            button.setTextColor(Theme.getColor(Theme.key_text_RedBold));
+        }
     }
 
     public String getVersionName() {

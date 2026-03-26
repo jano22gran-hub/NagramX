@@ -188,16 +188,18 @@ public class AvatarPreviewer {
         }
 
         public static Data of(TLRPC.User user, TLRPC.UserFull userFull, MenuItem... menuItems) {
-            ImageLocation imageLocation = ImageLocation.getForUserOrChat(userFull.user, ImageLocation.TYPE_BIG);
-            if (imageLocation == null && userFull.profile_photo != null) {
+            final TLRPC.User peerUser = user != null ? user : userFull.user;
+
+            ImageLocation imageLocation = ImageLocation.getForUserOrChat(peerUser, ImageLocation.TYPE_BIG);
+            if (imageLocation == null && userFull != null && userFull.profile_photo != null) {
                 imageLocation = ImageLocation.getForPhoto(FileLoader.getClosestPhotoSizeWithSize(userFull.profile_photo.sizes, 500), userFull.profile_photo);
             }
-            final ImageLocation thumbImageLocation = ImageLocation.getForUserOrChat(userFull.user, ImageLocation.TYPE_SMALL);
+            final ImageLocation thumbImageLocation = ImageLocation.getForUserOrChat(peerUser, ImageLocation.TYPE_SMALL);
             final String thumbFilter = thumbImageLocation != null && thumbImageLocation.photoSize instanceof TLRPC.TL_photoStrippedSize ? "b" : null;
             final ImageLocation videoLocation;
             final String videoFileName;
-            final BitmapDrawable thumb = user != null && user.photo != null ? user.photo.strippedBitmap : null;
-            if (userFull.profile_photo != null && !userFull.profile_photo.video_sizes.isEmpty()) {
+            final BitmapDrawable thumb = peerUser != null && peerUser.photo != null ? peerUser.photo.strippedBitmap : null;
+            if (userFull != null && userFull.profile_photo != null && !userFull.profile_photo.video_sizes.isEmpty()) {
                 final TLRPC.VideoSize videoSize = FileLoader.getClosestVideoSizeWithSize(userFull.profile_photo.video_sizes, 1000);
                 videoLocation = ImageLocation.getForPhoto(videoSize, userFull.profile_photo);
                 videoFileName = FileLoader.getAttachFileName(videoSize);
@@ -206,7 +208,7 @@ public class AvatarPreviewer {
                 videoFileName = null;
             }
             final String videoFilter = videoLocation != null && videoLocation.imageType == FileLoader.IMAGE_TYPE_ANIMATION ? ImageLoader.AUTOPLAY_FILTER : null;
-            return new Data(imageLocation, thumbImageLocation, videoLocation, null, thumbFilter, videoFilter, videoFileName, thumb, userFull.user, menuItems, null);
+            return new Data(imageLocation, thumbImageLocation, videoLocation, null, thumbFilter, videoFilter, videoFileName, thumb, peerUser, menuItems, null);
         }
 
         public static Data of(TLRPC.Chat chat, int classGuid, MenuItem... menuItems) {

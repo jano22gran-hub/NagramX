@@ -133,7 +133,7 @@
     <string name="DisableGhostMode">ゴースト OFF</string>
     <string name="GhostModeEnabled">ゴーストモードが有効です</string>
     <string name="GhostModeDisabled">ゴーストモードが無効です</string>
-    <string name="GhostModeInDrawer">メインタブショートカット</string>
+    <string name="GhostModeInDrawer">ショートカット</string>
     <string name="GhostModeStatusIndicator">ゴーストモード標識</string>
     <string name="DontSendReadMessagePackets">メッセージの既読を送信しない</string>
     <string name="DontReadStoriesPackets">ストーリーの既読を送信しない</string>
@@ -323,4 +323,6 @@
     <string name="PasscodeShowMessagePreviewWhenLockedAbout">パスコードロックが有効な場合でも通知内容を表示します。</string>
     <string name="StickerSavedHint">ステッカーを保存しました。</string>
     <string name="StickerCopied">ステッカーをコピーしました。</string>
+    <string name="StrokeOnViews">グレア効果</string>
+    <string name="HideBottomNavigationBar">下部ナビゲーションバーを非表示</string>
 </resources>

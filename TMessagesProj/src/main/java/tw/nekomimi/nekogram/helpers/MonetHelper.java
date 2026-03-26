@@ -1,5 +1,7 @@
 package tw.nekomimi.nekogram.helpers;
 
+import static org.telegram.ui.Components.Switch.SWITCH_STYLE_MD3;
+
 import android.graphics.Color;
 import android.os.Build;
 
@@ -15,6 +17,8 @@ import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.Theme;
 
 import java.util.HashMap;
+
+import xyz.nextalone.nagram.NaConfig;
 
 @RequiresApi(api = Build.VERSION_CODES.S)
 public class MonetHelper {
@@ -194,6 +198,12 @@ public class MonetHelper {
             }
         }
         return !value.isEmpty();
+    }
+
+    public static boolean useMonetMd3Colors() {
+        return NaConfig.INSTANCE.getSwitchStyle().Int() == SWITCH_STYLE_MD3
+            && Theme.getActiveTheme() != null
+            && Theme.getActiveTheme().isMonet();
     }
 
     /**

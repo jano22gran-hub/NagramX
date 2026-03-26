@@ -10679,6 +10679,7 @@ public class ChatActivity extends BaseFragment implements
         }
 
         boolean noforward = getMessagesController().isChatNoForwards(currentChat);
+        boolean canSendMessages = ChatObject.canSendMessages(currentChat);
         actionModeViews.add(actionModeOtherItem = actionMode.addItemWithWidth(nkactionbarbtn_action_mode_other, R.drawable.ic_ab_other, AndroidUtilities.dp(54), LocaleController.getString(R.string.MessageMenu)));
 
         if (currentEncryptedChat == null && !noforward) {
@@ -10689,18 +10690,16 @@ public class ChatActivity extends BaseFragment implements
         actionModeOtherItem.addSubItem(nkbtn_unpin, R.drawable.msg_unpin, LocaleController.getString(R.string.UnpinMessage));
         if (!noforward) {
             actionModeOtherItem.addSubItem(nkbtn_savemessage, R.drawable.menu_saved, LocaleController.getString(R.string.AddToSavedMessages));
+            if (canSendMessages) actionModeOtherItem.addSubItem(nkbtn_repeat, R.drawable.msg_repeat, LocaleController.getString(R.string.Repeat));
         }
-        if (!noforward) {
-            actionModeOtherItem.addSubItem(nkbtn_repeat, R.drawable.msg_repeat, LocaleController.getString(R.string.Repeat));
-        }
-        if (!noforward) {
+        if (canSendMessages) {
             actionModeOtherItem.addSubItem(nkbtn_repeatascopy, R.drawable.msg_repeat, LocaleController.getString(R.string.RepeatAsCopy));
         }
         actionModeOtherItem.addSubItem(nkbtn_hide, R.drawable.msg_disable, LocaleController.getString(R.string.Hide));
         actionModeOtherItem.addSubItem(nkbtn_report, R.drawable.msg_report, LocaleController.getString(R.string.ReportChat));
         actionModeOtherItem.addSubItem(nkbtn_detail,R.drawable.msg_info,LocaleController.getString(R.string.MessageDetails));
 
-        actionMode.setItemVisibility(nkactionbarbtn_reply, ChatObject.canSendMessages(currentChat) && (selectedMessagesIds[0].size() + selectedMessagesIds[1].size() == 1) && NaConfig.INSTANCE.getActionBarButtonReply().Bool() ? View.VISIBLE : View.GONE);
+        actionMode.setItemVisibility(nkactionbarbtn_reply, canSendMessages && (selectedMessagesIds[0].size() + selectedMessagesIds[1].size() == 1) && NaConfig.INSTANCE.getActionBarButtonReply().Bool() ? View.VISIBLE : View.GONE);
         actionMode.setItemVisibility(edit, canEditMessagesCount == 1 && (selectedMessagesIds[0].size() + selectedMessagesIds[1].size() == 1) && NaConfig.INSTANCE.getActionBarButtonEdit().Bool() ? View.VISIBLE : View.GONE);
         actionMode.setItemVisibility(nkactionbarbtn_selectBetween, NaConfig.INSTANCE.getActionBarButtonSelectBetween().Bool() ? View.VISIBLE : View.GONE);
         actionMode.setItemVisibility(copy, /*!isPeerNoForwards() &&*/ (selectedMessagesCanCopyIds[0].size() + selectedMessagesCanCopyIds[1].size() != 0) && NaConfig.INSTANCE.getActionBarButtonCopy().Bool() ? View.VISIBLE : View.GONE);
@@ -19679,7 +19678,7 @@ public class ChatActivity extends BaseFragment implements
                     repeatItem.setVisibility(canForward && canSendMessage);
                 }
                 if (RepeatAsCopyItem != null) {
-                    RepeatAsCopyItem.setVisibility(canForward && canSendMessage);
+                    RepeatAsCopyItem.setVisibility(canSendMessage);
                 }
                 if (reportItem != null) {
                     reportItem.setVisibility(canReport);
@@ -39867,6 +39866,8 @@ public class ChatActivity extends BaseFragment implements
         @Override
         public boolean didLongPressUserAvatar(ChatMessageCell cell, TLRPC.User user, float touchX, float touchY) {
             if (isAvatarPreviewerEnabled()) {
+                final TLRPC.User controllerUser = getMessagesController().getUser(user.id);
+                final TLRPC.User previewUser = controllerUser != null ? controllerUser : user;
                 final boolean enableMention = currentChat != null && (bottomChannelButtonsLayout == null || bottomChannelButtonsLayout.getVisibility() != View.VISIBLE) && (bottomOverlay == null || bottomOverlay.getVisibility() != View.VISIBLE);
                 final boolean enableSearchMessages = currentChat != null && (threadMessageId == 0 || isTopic) && (!ChatObject.isChannel(currentChat) || currentChat.megagroup);
                 final AvatarPreviewer.MenuItem[] menuItems = new AvatarPreviewer.MenuItem[2 + (enableMention ? 1 : 0) + (enableSearchMessages ? 1 : 0)];
@@ -39879,30 +39880,30 @@ public class ChatActivity extends BaseFragment implements
                 if (enableSearchMessages) {
                     menuItems[a++] = AvatarPreviewer.MenuItem.SEARCH_MESSAGES;
                 }
-                final TLRPC.UserFull userFull = getMessagesController().getUserFull(user.id);
+                final TLRPC.UserFull userFull = getMessagesController().getUserFull(previewUser.id);
                 AvatarPreviewer.Data data;
                 if (userFull != null) {
-                    data = AvatarPreviewer.Data.of(user, userFull, menuItems);
+                    data = AvatarPreviewer.Data.of(previewUser, userFull, menuItems);
                     if (!AvatarPreviewer.canPreview(data)) {
-                        data = AvatarPreviewer.Data.of(user, classGuid, menuItems);
+                        data = AvatarPreviewer.Data.of(previewUser, classGuid, menuItems);
                     }
                 } else {
-                    data = AvatarPreviewer.Data.of(user, classGuid, menuItems);
+                    data = AvatarPreviewer.Data.of(previewUser, classGuid, menuItems);
                 }
                 if (AvatarPreviewer.canPreview(data)) {
                     AvatarPreviewer.getInstance().show((ViewGroup) fragmentView, themeDelegate, data, item -> {
                         switch (item) {
                             case SEND_MESSAGE:
-                                openDialog(cell, user);
+                                openDialog(cell, previewUser);
                                 break;
                             case OPEN_PROFILE:
-                                openProfile(user);
+                                openProfile(previewUser);
                                 break;
                             case MENTION:
-                                appendMention(user);
+                                appendMention(previewUser);
                                 break;
                             case SEARCH_MESSAGES:
-                                openSearchWithUser(user);
+                                openSearchWithUser(previewUser);
                                 break;
                         }
                     });
@@ -39910,16 +39911,16 @@ public class ChatActivity extends BaseFragment implements
                 } else {
                     ItemOptions.makeOptions(ChatActivity.this, cell)
                         .add(R.drawable.msg_openprofile, getString(R.string.OpenProfile), () -> {
-                            openProfile(user);
+                            openProfile(previewUser);
                         })
                         .add(R.drawable.msg_discussion, getString(R.string.SendMessage), () -> {
-                            openDialog(cell, user);
+                            openDialog(cell, previewUser);
                         })
                         .addIf(enableMention, R.drawable.msg_mention, getString(R.string.Mention), () -> {
-                            appendMention(user);
+                            appendMention(previewUser);
                         })
                         .addIf(enableSearchMessages, R.drawable.msg_search, getString(R.string.AvatarPreviewSearchMessages), () -> {
-                            openSearchWithUser(user);
+                            openSearchWithUser(previewUser);
                         })
                         .setDrawScrim(false)
                         .setGravity(Gravity.LEFT)
@@ -46843,11 +46844,13 @@ public class ChatActivity extends BaseFragment implements
                             items.add(LocaleController.getString(R.string.SaveToGallery));
                             options.add(nkbtn_stickerdl);
                             icons.add(R.drawable.msg_gallery);
-                            allowCopyPhoto = true;
-                            if (!GroupedIconsView.useGroupedIcons()) {
-                                items.add(getString(R.string.CopySticker));
-                                icons.add(R.drawable.msg_copy_photo);
-                                options.add(OPTION_COPY_PHOTO);
+                            if (!selectedObject.isVideoSticker()) {
+                                allowCopyPhoto = true;
+                                if (!GroupedIconsView.useGroupedIcons()) {
+                                    items.add(getString(R.string.CopySticker));
+                                    icons.add(R.drawable.msg_copy_photo);
+                                    options.add(OPTION_COPY_PHOTO);
+                                }
                             }
                         }
                         if (NaConfig.INSTANCE.getShowAddToStickers().Bool()) {

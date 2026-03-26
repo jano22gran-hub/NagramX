@@ -1410,7 +1410,7 @@ public class PrivacySettingsActivity extends BaseFragment implements Notificatio
                         } else {
                             value = String.format(LocaleController.getInstance().getCurrentLocale(), "%d", count);
                         }
-                        textCell2.setTextAndValueAndIcon(getString(R.string.BlockedChannels), value, true, R.drawable.msg2_block2, true);
+                        textCell2.setTextAndValueAndIcon(getString(R.string.BlockedChannels), value, true, R.drawable.msg_block, true);
                     }
                     textCell2.setDrawLoading(showLoading, loadingLen, animated);
                     break;

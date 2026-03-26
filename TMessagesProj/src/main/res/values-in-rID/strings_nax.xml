@@ -323,4 +323,5 @@
     <string name="PasscodeShowMessagePreviewWhenLockedAbout">Menampilkan isi pemberitahuan meskipun kunci sandi aktif.</string>
     <string name="StickerSavedHint">Stiker disimpan ke galeri.</string>
     <string name="StickerCopied">Stiker disalin ke papan klip.</string>
+    <string name="StrokeOnViews">Efek silau</string>
 </resources>

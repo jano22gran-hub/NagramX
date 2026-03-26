@@ -42,6 +42,7 @@ import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Cells.BaseCell;
 
 import tw.nekomimi.nekogram.NekoConfig;
+import tw.nekomimi.nekogram.helpers.MonetHelper;
 import xyz.nextalone.nagram.NaConfig;
 
 public class Switch extends View {
@@ -73,6 +74,7 @@ public class Switch extends View {
 
     private Drawable iconDrawable;
     private int lastIconColor;
+    private int lastCheckColor = Integer.MIN_VALUE;
 
     private boolean drawRipple;
     private RippleDrawable rippleDrawable;
@@ -427,6 +429,15 @@ public class Switch extends View {
         int alpha;
         int color;
 
+        int trackCheckedFillKey = trackCheckedColorKey;
+        int thumbCheckedKey = thumbCheckedColorKey;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && MonetHelper.useMonetMd3Colors()) {
+            trackCheckedFillKey = Theme.key_featuredStickers_addButton;
+            thumbCheckedKey = Theme.getActiveTheme().isMonetDark() || Theme.getActiveTheme().isMonetAmoled()
+                    ? Theme.key_statisticChartRipple // a1_800
+                    : Theme.key_chat_outInstant; // a1_10
+        }
+
         for (int a = 0; a < 2; a++) {
             if (a == 1 && overrideColorProgress == 0) {
                 continue;
@@ -449,7 +460,7 @@ public class Switch extends View {
 
             int originalColor1;
             color1 = originalColor1 = processColor(Theme.getColor(trackColorKey, resourcesProvider));
-            color2 = processColor(Theme.getColor(trackCheckedColorKey, resourcesProvider));
+            color2 = processColor(Theme.getColor(trackCheckedFillKey, resourcesProvider));
 
             if (isUsingSeparateView) {
                 color1 = Color.TRANSPARENT;
@@ -532,7 +543,7 @@ public class Switch extends View {
             }
 
             color1 = Theme.getColor(isUsingSeparateView ? trackColorKey : thumbColorKey, resourcesProvider);
-            color2 = processColor(Theme.getColor(thumbCheckedColorKey, resourcesProvider));
+            color2 = processColor(Theme.getColor(thumbCheckedKey, resourcesProvider));
             r1 = Color.red(color1);
             r2 = Color.red(color2);
             g1 = Color.green(color1);
@@ -556,6 +567,11 @@ public class Switch extends View {
 
             if (a == 0 && NaConfig.INSTANCE.getSwitchStyle().Int() == SWITCH_STYLE_DEFAULT || NaConfig.INSTANCE.getSwitchStyle().Int() == SWITCH_STYLE_MD3) {
                 if (NaConfig.INSTANCE.getSwitchStyle().Int() == SWITCH_STYLE_MD3) {
+                    int checkColor = Theme.getColor(trackCheckedFillKey, resourcesProvider);
+                    if (lastCheckColor != checkColor) {
+                        checkDrawable.setColorFilter(new PorterDuffColorFilter(checkColor, PorterDuff.Mode.MULTIPLY));
+                        lastCheckColor = checkColor;
+                    }
                     int iconWidth = checkDrawable.getIntrinsicWidth() / 2;
                     int iconHeight = checkDrawable.getIntrinsicHeight() / 2;
                     checkDrawable.setBounds(tx - iconWidth / 2, ty - iconHeight / 2, tx + iconWidth / 2, ty + iconHeight / 2);

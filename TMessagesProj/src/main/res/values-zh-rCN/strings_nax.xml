@@ -133,7 +133,7 @@
     <string name="DisableGhostMode">禁用幽灵模式</string>
     <string name="GhostModeEnabled">幽灵模式已启用</string>
     <string name="GhostModeDisabled">幽灵模式已禁用</string>
-    <string name="GhostModeInDrawer">主页快捷方式</string>
+    <string name="GhostModeInDrawer">快捷方式</string>
     <string name="GhostModeStatusIndicator">幽灵模式指示器</string>
     <string name="DontSendReadMessagePackets">不显示消息已读</string>
     <string name="DontReadStoriesPackets">不显示动态已读</string>
@@ -323,4 +323,6 @@
     <string name="PasscodeShowMessagePreviewWhenLockedAbout">在密码锁启用时不再隐藏通知内容。</string>
     <string name="StickerSavedHint">贴纸已保存到相册。</string>
     <string name="StickerCopied">贴纸已复制到剪贴板。</string>
+    <string name="StrokeOnViews">眩光效果</string>
+    <string name="HideBottomNavigationBar">隐藏底部导航栏</string>
 </resources>
