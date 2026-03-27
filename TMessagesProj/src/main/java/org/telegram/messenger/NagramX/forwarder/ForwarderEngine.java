@@ -273,8 +273,7 @@ public class ForwarderEngine {
                 if (photo == null) return null;
 
                 // ✅ PHOTO_LEGACY — نفس Python: photo_id + access_hash + dc_id
-                // ⚠️ كان غلط: dc_id أول — الحين photo_id أول مثل Python
-                if (photo.access_hash != 0 && photo.id != 0)
+                if (photo.access_hash != 0 && photo.id != 0 && photo.dc_id != 0)
                     return "PHOTO_LEGACY|" + photo.id + "_" + photo.access_hash + "_" + photo.dc_id;
 
                 return "PHOTO_OLD|" + photo.id;
