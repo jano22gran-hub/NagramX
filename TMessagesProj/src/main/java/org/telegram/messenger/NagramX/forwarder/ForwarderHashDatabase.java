@@ -437,7 +437,10 @@ public class ForwarderHashDatabase {
         if (hash.startsWith("FAST_UNIQ|")) return "fast_unique";
         if (hash.startsWith("FALLBACK_DOC|")) return "fallback_doc";
         if (hash.startsWith("FALLBACK_PHOTO|")) return "fallback_photo";
+        if (hash.startsWith("FALLBACK_GEN|")) return "fallback_gen";
+        if (hash.startsWith("FALLBACK_TEXT|")) return "fallback_text";
         if (hash.startsWith("FP:")) return "legacy_fp";
+        if (hash.startsWith("CHASH:")) return "content_doc";
         if (hash.length() == 32 && hash.matches("[0-9a-f]+")) return "content_doc";
         return "unknown";
     }
