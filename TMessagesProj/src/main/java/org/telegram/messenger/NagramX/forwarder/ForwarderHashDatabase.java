@@ -219,6 +219,8 @@ public class ForwarderHashDatabase {
             long count = 0;
             try (Cursor c = db.rawQuery("SELECT COUNT(*) FROM hashes", null)) { if (c.moveToFirst()) count = c.getLong(0); }
             db.execSQL("DELETE FROM hashes");
+            try { db.execSQL("VACUUM"); } catch (Exception ignored) {}
+            Log.i(TAG, "✅ cleared " + count + " hashes + VACUUM");
             return count;
         } catch (Exception e) { return 0; }
     }
