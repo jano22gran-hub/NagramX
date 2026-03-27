@@ -103,9 +103,6 @@ public class ForwarderHashDatabase {
     public boolean isCorrupted() { return corrupted.get(); }
     public ExecutorService getBgWriter() { return bgWriter; }
 
-    // ==========================================
-    // preload
-    // ==========================================
     public int preloadToCache() {
         if (corrupted.get()) return 0;
         int count = 0;
@@ -122,12 +119,8 @@ public class ForwarderHashDatabase {
         return count;
     }
 
-    // ==========================================
-    // isDuplicate — cache أولاً ثم SQL
-    // ==========================================
     public boolean isDuplicate(String hash) {
         if (hash == null || hash.length() <= 5 || corrupted.get()) return false;
-
         cacheLock.lock();
         try { if (cache.get(hash) != null) return true; }
         finally { cacheLock.unlock(); }
@@ -136,32 +129,22 @@ public class ForwarderHashDatabase {
             SQLiteDatabase db = dbHelper.getReadableDatabase();
             try (Cursor c = db.rawQuery("SELECT 1 FROM hashes WHERE hash=? LIMIT 1", new String[]{hash})) {
                 boolean found = c.moveToFirst();
-                if (found) {
-                    cacheLock.lock();
-                    try { cache.put(hash, System.currentTimeMillis()); }
-                    finally { cacheLock.unlock(); }
-                }
+                if (found) { cacheLock.lock(); try { cache.put(hash, System.currentTimeMillis()); } finally { cacheLock.unlock(); } }
                 return found;
             }
         } catch (Exception e) { return false; }
     }
 
-    // ==========================================
-    // addHash — فوراً للـ cache + batch للـ DB
-    // ==========================================
     public void addHash(String hash, String hashType) {
         if (hash == null || hash.length() <= 5 || corrupted.get()) return;
-
         cacheLock.lock();
-        try { cache.put(hash, System.currentTimeMillis()); }
-        finally { cacheLock.unlock(); }
+        try { cache.put(hash, System.currentTimeMillis()); } finally { cacheLock.unlock(); }
 
         writeLock.lock();
         try {
             pending.add(new String[]{hash, String.valueOf(System.currentTimeMillis() / 1000), hashType != null ? hashType : "unknown"});
             if (pending.size() >= BATCH_SIZE) {
-                List<String[]> batch = new ArrayList<>(pending);
-                pending.clear();
+                List<String[]> batch = new ArrayList<>(pending); pending.clear();
                 bgWriter.execute(() -> flushBatch(batch));
             }
         } finally { writeLock.unlock(); }
@@ -170,11 +153,8 @@ public class ForwarderHashDatabase {
     public void flushWrites() {
         List<String[]> batch;
         writeLock.lock();
-        try {
-            if (pending.isEmpty()) return;
-            batch = new ArrayList<>(pending);
-            pending.clear();
-        } finally { writeLock.unlock(); }
+        try { if (pending.isEmpty()) return; batch = new ArrayList<>(pending); pending.clear(); }
+        finally { writeLock.unlock(); }
         flushBatch(batch);
     }
 
@@ -198,21 +178,16 @@ public class ForwarderHashDatabase {
     }
 
     // ==========================================
-    // إحصائيات مفصلة
+    // إحصائيات
     // ==========================================
     public ForwarderStats getStats() {
         ForwarderStats s = new ForwarderStats();
         s.dbPath = dbPath; s.exportPath = mediaDir; s.corrupted = corrupted.get();
+        cacheLock.lock(); try { s.cacheSize = cache.size(); } finally { cacheLock.unlock(); }
+        writeLock.lock(); try { s.pendingWrites = pending.size(); } finally { writeLock.unlock(); }
 
-        cacheLock.lock();
-        try { s.cacheSize = cache.size(); } finally { cacheLock.unlock(); }
-        writeLock.lock();
-        try { s.pendingWrites = pending.size(); } finally { writeLock.unlock(); }
-
-        File f = new File(dbPath);
-        s.dbSizeBytes = f.exists() ? f.length() : 0;
-        File wal = new File(dbPath + "-wal");
-        if (wal.exists()) s.dbSizeBytes += wal.length();
+        File f = new File(dbPath); s.dbSizeBytes = f.exists() ? f.length() : 0;
+        File wal = new File(dbPath + "-wal"); if (wal.exists()) s.dbSizeBytes += wal.length();
 
         if (!corrupted.get()) {
             try {
@@ -236,12 +211,8 @@ public class ForwarderHashDatabase {
         return s;
     }
 
-    // ==========================================
-    // clearAll
-    // ==========================================
     public long clearAll() {
-        cacheLock.lock();
-        try { cache.clear(); } finally { cacheLock.unlock(); }
+        cacheLock.lock(); try { cache.clear(); } finally { cacheLock.unlock(); }
         if (corrupted.get()) return 0;
         try {
             SQLiteDatabase db = dbHelper.getWritableDatabase();
@@ -267,16 +238,16 @@ public class ForwarderHashDatabase {
 
             try (Cursor c = db.rawQuery("SELECT hash, timestamp, hash_type FROM hashes", null);
                  FileWriter fw = new FileWriter(out)) {
-                fw.write("{\"version\":\"NagramX-ForwarderPro\",\"export_time\":");
+                fw.write("{\"version\": \"NagramX-ForwarderPro\", \"export_time\": ");
                 fw.write(String.valueOf(System.currentTimeMillis() / 1000));
-                fw.write(",\"total_hashes\":"); fw.write(String.valueOf(total));
-                fw.write(",\"hashes\":[");
+                fw.write(", \"total_hashes\": "); fw.write(String.valueOf(total));
+                fw.write(", \"hashes\": [");
                 boolean first = true;
                 while (c.moveToNext()) {
-                    if (!first) fw.write(",");
-                    fw.write("{\"hash\":\""); fw.write(esc(c.getString(0)));
-                    fw.write("\",\"timestamp\":"); fw.write(String.valueOf(c.getLong(1)));
-                    fw.write(",\"hash_type\":\""); fw.write(esc(c.getString(2)));
+                    if (!first) fw.write(", ");
+                    fw.write("{\"hash\": \""); fw.write(esc(c.getString(0)));
+                    fw.write("\", \"timestamp\": "); fw.write(String.valueOf(c.getLong(1)));
+                    fw.write(", \"hash_type\": \""); fw.write(esc(c.getString(2)));
                     fw.write("\"}");
                     first = false;
                 }
@@ -290,8 +261,12 @@ public class ForwarderHashDatabase {
     }
 
     // ==========================================
-    // استيراد — إصلاح: يفحص الوجود قبل الإدخال
+    // ✅ Streaming Import — يقرأ object بـ object بدون تحميل الملف كامل
     // ==========================================
+    public interface ImportProgress {
+        void onProgress(int added, int scanned, int total);
+    }
+
     public List<File> findImportFiles() {
         List<File> files = new ArrayList<>();
         scanDir(new File(mediaDir), files);
@@ -308,63 +283,149 @@ public class ForwarderHashDatabase {
         if (ff != null) for (File f : ff) result.add(f);
     }
 
-    public int importFromJson(File inputFile) {
+    /**
+     * استيراد streaming — يقرأ الملف بـ buffer صغير ويستخرج الـ objects واحد واحد.
+     * لا يحمّل الملف كامل بالذاكرة.
+     * @param progress callback (nullable) للتحديث كل 1000 هاش
+     */
+    public int importFromJson(File inputFile, ImportProgress progress) {
         if (corrupted.get() || inputFile == null || !inputFile.exists()) return 0;
-        int added = 0;
+
+        int added = 0, scanned = 0;
+        int totalHint = estimateTotalHashes(inputFile);
+
         try {
-            StringBuilder sb = new StringBuilder();
-            try (BufferedReader br = new BufferedReader(new FileReader(inputFile))) {
-                String line; while ((line = br.readLine()) != null) sb.append(line);
-            }
-            String json = sb.toString().trim();
-            int hs = json.indexOf("\"hashes\"");
-            if (hs == -1) return 0;
-            int as = json.indexOf('[', hs);
-            if (as == -1) return 0;
-            int ae = json.lastIndexOf(']');
-            if (ae <= as) return 0;
-            String section = json.substring(as + 1, ae);
-
             SQLiteDatabase db = dbHelper.getWritableDatabase();
-            db.beginTransaction();
-            try {
-                int pos = 0;
-                while (pos < section.length()) {
-                    int os = section.indexOf('{', pos);
-                    if (os == -1) break;
-                    int oe = section.indexOf('}', os);
-                    if (oe == -1) break;
-                    String obj = section.substring(os, oe + 1);
-                    pos = oe + 1;
 
-                    String hash = xStr(obj, "hash");
-                    String ht = xStr(obj, "hash_type");
-                    long ts = xLong(obj, "timestamp");
-                    if (hash == null || hash.length() <= 5) continue;
-                    if (ht == null) ht = "imported";
-                    if (ts == 0) ts = System.currentTimeMillis() / 1000;
+            // ✅ Streaming: نقرأ بـ BufferedReader ونبني الـ objects بـ StringBuilder
+            try (BufferedReader br = new BufferedReader(new FileReader(inputFile), 64 * 1024)) {
+                // تخطي حتى نوصل لـ "hashes":[
+                boolean inArray = false;
+                StringBuilder objBuf = new StringBuilder(256);
+                int braceDepth = 0;
+                int ch;
+                int batchCount = 0;
 
-                    // ✅ فحص الوجود الصريح قبل الإدخال
-                    boolean exists = false;
-                    try (Cursor c = db.rawQuery("SELECT 1 FROM hashes WHERE hash=? LIMIT 1", new String[]{hash})) {
-                        exists = c.moveToFirst();
-                    }
-
-                    if (!exists) {
-                        ContentValues cv = new ContentValues();
-                        cv.put("hash", hash); cv.put("timestamp", ts); cv.put("hash_type", ht);
-                        db.insert("hashes", null, cv);
-                        added++;
-
-                        cacheLock.lock();
-                        try { cache.put(hash, ts); } finally { cacheLock.unlock(); }
+                // ابحث عن بداية المصفوفة
+                StringBuilder header = new StringBuilder();
+                while ((ch = br.read()) != -1) {
+                    header.append((char) ch);
+                    if (header.length() > 200) {
+                        // ابحث عن "hashes" ثم [
+                        String h = header.toString();
+                        int idx = h.indexOf("\"hashes\"");
+                        if (idx != -1) {
+                            int bracket = h.indexOf('[', idx);
+                            if (bracket != -1) { inArray = true; break; }
+                        }
+                        // لو header كبير جداً، حافظ بس آخر 100 حرف
+                        if (header.length() > 500) {
+                            header.delete(0, header.length() - 100);
+                        }
                     }
                 }
-                db.setTransactionSuccessful();
-            } finally { db.endTransaction(); }
-            Log.i(TAG, "✅ import: " + added + " from " + inputFile.getName());
+
+                // لو ما لگينا المصفوفة بالـ header، نكمل نقرأ
+                if (!inArray) {
+                    String h = header.toString();
+                    int idx = h.indexOf("\"hashes\"");
+                    if (idx != -1) {
+                        int bracket = h.indexOf('[', idx);
+                        if (bracket != -1) inArray = true;
+                    }
+                    if (!inArray) {
+                        // نكمل نقرأ حرف حرف حتى نلاقي
+                        while ((ch = br.read()) != -1) {
+                            char c = (char) ch;
+                            if (c == '[') { inArray = true; break; }
+                        }
+                    }
+                }
+
+                if (!inArray) return 0;
+
+                // الحين نقرأ الـ objects واحد واحد
+                db.beginTransaction();
+                try {
+                    while ((ch = br.read()) != -1) {
+                        char c = (char) ch;
+
+                        if (c == '{') {
+                            braceDepth++;
+                            objBuf.setLength(0);
+                            objBuf.append(c);
+                        } else if (c == '}' && braceDepth > 0) {
+                            objBuf.append(c);
+                            braceDepth--;
+                            if (braceDepth == 0) {
+                                // عالج الـ object
+                                String obj = objBuf.toString();
+                                scanned++;
+
+                                String hash = xStr(obj, "hash");
+                                String ht = xStr(obj, "hash_type");
+                                long ts = xLong(obj, "timestamp");
+
+                                if (hash != null && hash.length() > 5) {
+                                    if (ht == null) ht = "imported";
+                                    if (ts == 0) ts = System.currentTimeMillis() / 1000;
+
+                                    boolean exists = false;
+                                    try (Cursor cur = db.rawQuery("SELECT 1 FROM hashes WHERE hash=? LIMIT 1", new String[]{hash})) {
+                                        exists = cur.moveToFirst();
+                                    }
+
+                                    if (!exists) {
+                                        ContentValues cv = new ContentValues();
+                                        cv.put("hash", hash); cv.put("timestamp", ts); cv.put("hash_type", ht);
+                                        db.insert("hashes", null, cv);
+                                        added++;
+                                        batchCount++;
+
+                                        cacheLock.lock();
+                                        try { cache.put(hash, ts); } finally { cacheLock.unlock(); }
+                                    }
+
+                                    // commit كل 5000 لتقليل حجم الـ transaction
+                                    if (batchCount >= 5000) {
+                                        db.setTransactionSuccessful();
+                                        db.endTransaction();
+                                        db.beginTransaction();
+                                        batchCount = 0;
+                                    }
+                                }
+
+                                // تحديث progress كل 1000
+                                if (progress != null && scanned % 1000 == 0) {
+                                    progress.onProgress(added, scanned, totalHint);
+                                }
+                            }
+                        } else if (braceDepth > 0) {
+                            objBuf.append(c);
+                        } else if (c == ']') {
+                            break; // نهاية المصفوفة
+                        }
+                    }
+                    db.setTransactionSuccessful();
+                } finally { db.endTransaction(); }
+            }
+
+            // تقرير نهائي
+            if (progress != null) progress.onProgress(added, scanned, scanned);
+            Log.i(TAG, "✅ streaming import: " + added + " added, " + scanned + " scanned from " + inputFile.getName());
         } catch (Exception e) { Log.e(TAG, "import: " + e.getMessage(), e); }
         return added;
+    }
+
+    // overload بدون progress (للتوافق)
+    public int importFromJson(File inputFile) {
+        return importFromJson(inputFile, null);
+    }
+
+    private int estimateTotalHashes(File file) {
+        // تقدير سريع: كل هاش ≈ 120 بايت بالـ JSON
+        long size = file.length();
+        return (int)(size / 120);
     }
 
     // ==========================================
@@ -453,31 +514,20 @@ public class ForwarderHashDatabase {
         synchronized (INSTANCE_LOCK) { instance = null; }
     }
 
-    // JSON helpers
+    // JSON helpers — يدعم المسافة بعد النقطتين
     private static String xStr(String j, String k) {
-        // يدعم كلا الصيغتين: "key":"value" و "key": "value" (مع مسافة)
-        String s1 = "\"" + k + "\":\"";
-        String s2 = "\"" + k + "\": \"";
-        int i = j.indexOf(s1);
-        int skip = s1.length();
-        if (i == -1) {
-            i = j.indexOf(s2);
-            skip = s2.length();
-        }
+        String s1 = "\"" + k + "\":\"", s2 = "\"" + k + "\": \"";
+        int i = j.indexOf(s1); int skip = s1.length();
+        if (i == -1) { i = j.indexOf(s2); skip = s2.length(); }
         if (i == -1) return null;
-        i += skip;
-        int e = j.indexOf('"', i);
+        i += skip; int e = j.indexOf('"', i);
         return e == -1 ? null : j.substring(i, e);
     }
     private static long xLong(String j, String k) {
-        // يدعم كلا الصيغتين: "key":123 و "key": 123 (مع مسافة)
-        String s1 = "\"" + k + "\":";
-        String s2 = "\"" + k + "\": ";
+        String s1 = "\"" + k + "\":", s2 = "\"" + k + "\": ";
         int i = j.indexOf(s1);
-        if (i == -1) { i = j.indexOf(s2); if (i != -1) i += s2.length(); }
-        else i += s1.length();
+        if (i == -1) { i = j.indexOf(s2); if (i != -1) i += s2.length(); } else i += s1.length();
         if (i == -1) return 0;
-        // تخطي المسافات
         while (i < j.length() && j.charAt(i) == ' ') i++;
         StringBuilder n = new StringBuilder();
         for (; i < j.length(); i++) { char c = j.charAt(i); if (c >= '0' && c <= '9') n.append(c); else if (n.length() > 0) break; }
