@@ -1,8 +1,11 @@
 package org.telegram.messenger.NagramX.forwarder;
 
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.SystemClock;
 import android.util.Log;
 
+import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.Utilities;
@@ -31,6 +34,7 @@ public class ForwarderEngine {
     private static final int SEND_TIMEOUT_MS = 30_000;
     private static final int MAX_RETRIES = 5;
     private static final int MAX_CONSECUTIVE_FAILURES = 5;
+    private static final String STATE_PREFS = "ForwarderPro_State";
 
     public static class ForwardConfig {
         public long sourceId, targetId;
@@ -46,6 +50,7 @@ public class ForwarderEngine {
         public boolean skipDuplicates = true, strictDetection = true;
         public int maxMessages = 30_000;
         public boolean reverseOrder = false;
+        public int resumeFromIndex = 0; // ✅ للاستمرار من نقطة محددة
     }
 
     public interface ProgressCallback {
@@ -55,6 +60,78 @@ public class ForwarderEngine {
         void onRestricted(String chatName);
     }
 
+    // ==========================================
+    // ✅ SavedState — حالة التحويل المحفوظة
+    // ==========================================
+    public static class SavedState {
+        public long sourceId, targetId;
+        public int sentCount, totalCollected;
+        public long timestamp; // متى حُفظت
+        public int lastSentIndex; // آخر index مُرسَل بالقائمة
+
+        public String getAge() {
+            long mins = (System.currentTimeMillis() - timestamp) / 60_000;
+            if (mins < 1) return "الآن";
+            if (mins < 60) return mins + " دقيقة";
+            long hrs = mins / 60;
+            if (hrs < 24) return hrs + " ساعة";
+            return (hrs / 24) + " يوم";
+        }
+    }
+
+    /**
+     * يفحص لو فيه حالة محفوظة لهالمصدر والهدف
+     */
+    public static SavedState getSavedState(long sourceId, long targetId) {
+        SharedPreferences p = ApplicationLoader.applicationContext.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE);
+        String key = sourceId + "_" + targetId;
+        long ts = p.getLong(key + "_ts", 0);
+        if (ts == 0) return null;
+
+        // لو أقدم من 7 أيام — نحذفها
+        if (System.currentTimeMillis() - ts > 7 * 24 * 3600_000L) {
+            clearState(sourceId, targetId);
+            return null;
+        }
+
+        SavedState s = new SavedState();
+        s.sourceId = sourceId;
+        s.targetId = targetId;
+        s.sentCount = p.getInt(key + "_sent", 0);
+        s.totalCollected = p.getInt(key + "_total", 0);
+        s.lastSentIndex = p.getInt(key + "_idx", 0);
+        s.timestamp = ts;
+        return s;
+    }
+
+    /**
+     * يحفظ الحالة الحالية
+     */
+    private static void saveState(long sourceId, long targetId, int sentCount, int totalCollected, int lastSentIndex) {
+        String key = sourceId + "_" + targetId;
+        ApplicationLoader.applicationContext.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putLong(key + "_ts", System.currentTimeMillis())
+            .putInt(key + "_sent", sentCount)
+            .putInt(key + "_total", totalCollected)
+            .putInt(key + "_idx", lastSentIndex)
+            .apply();
+    }
+
+    /**
+     * يمسح الحالة (بعد الاكتمال أو لما المستخدم يختار "من جديد")
+     */
+    public static void clearState(long sourceId, long targetId) {
+        String key = sourceId + "_" + targetId;
+        ApplicationLoader.applicationContext.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .remove(key + "_ts").remove(key + "_sent").remove(key + "_total").remove(key + "_idx")
+            .apply();
+    }
+
+    // ==========================================
+    // Instance
+    // ==========================================
     private final ForwarderHashDatabase hashDb;
     private final AtomicBoolean stopped = new AtomicBoolean(false);
     private final AtomicBoolean paused = new AtomicBoolean(false);
@@ -91,7 +168,21 @@ public class ForwarderEngine {
             if (msgs.isEmpty()) { cb.onError("لا توجد رسائل للتحويل"); return; }
             if (stopped.get()) return;
 
-            send(msgs, cfg, msgs.size(), cb);
+            // ✅ لو فيه استمرار — نقص الرسائل اللي انحولت
+            int startIndex = cfg.resumeFromIndex;
+            if (startIndex > 0 && startIndex < msgs.size()) {
+                msgs = new ArrayList<>(msgs.subList(startIndex, msgs.size()));
+                cb.onProgress(0, msgs.size(), "⏩ استمرار من رسالة " + (startIndex + 1));
+            }
+
+            int total = msgs.size();
+            send(msgs, cfg, total, cb);
+
+            // ✅ لو اكتمل — نمسح الحالة
+            if (!stopped.get()) {
+                clearState(cfg.sourceId, cfg.targetId);
+            }
+
             cb.onComplete(totalSent.get(), totalSkipped.get(), SystemClock.elapsedRealtime() - t0);
         } catch (Exception e) {
             cb.onError("خطأ: " + e.getMessage());
@@ -184,6 +275,9 @@ public class ForwarderEngine {
                 totalSent.addAndGet(n); lbCount += n; fails = 0;
                 cb.onProgress(totalSent.get(), total, "✅ " + totalSent.get() + " / " + total);
 
+                // ✅ حفظ الحالة كل chunk
+                saveState(cfg.sourceId, cfg.targetId, totalSent.get(), total, cfg.resumeFromIndex + i + n);
+
                 if (cfg.largeBatchEnabled && cfg.largeBatchSize > 0 && lbCount >= cfg.largeBatchSize && i + n < msgs.size()) {
                     lbCount = 0;
                     cb.onProgress(totalSent.get(), total, "⏸ توقف وجبة — " + (int) cfg.largeBatchDelay + "s");
@@ -238,16 +332,7 @@ public class ForwarderEngine {
 
     // ==========================================
     // ✅ computeHash — منع تكرار عالمي
-    //
-    // الهاش يعتمد على المحتوى فقط — مو على الكروب المصدر
-    // نفس الصورة/الفيديو من أي كروب = نفس الهاش = يُمنع
-    //
-    // الترتيب (نفس Python v20.2.9):
-    // 1. DOC_LEGACY / PHOTO_LEGACY — access_hash + dc_id + id
-    // 2. DOC_OLD / PHOTO_OLD — fallback
-    // 3. FALLBACK_DOC / FALLBACK_PHOTO — media بدون تفاصيل
-    // 4. TEXT — هاش المحتوى النصي
-    // 5. null — رسائل بدون محتوى (service, empty)
+    // الهاش يعتمد على المحتوى فقط — مو على الكروب
     // ==========================================
     public static String computeHash(TLRPC.Message msg) {
         if (msg == null) return null;
@@ -255,42 +340,28 @@ public class ForwarderEngine {
         try {
             TLRPC.MessageMedia media = msg.media;
 
-            // ══════ 1. Document (فيديو، صوت، ملف، GIF، ستكر) ══════
             if (media instanceof TLRPC.TL_messageMediaDocument) {
                 TLRPC.Document doc = ((TLRPC.TL_messageMediaDocument) media).document;
                 if (doc != null) {
-                    // DOC_LEGACY — الطريقة الرئيسية (92% من هاشاتك)
                     if (doc.access_hash != 0 && doc.dc_id != 0)
                         return "DOC_LEGACY|" + doc.dc_id + "_" + doc.access_hash + "_" + doc.id;
-
-                    // DOC_OLD — fallback
                     String mime = doc.mime_type != null ? doc.mime_type : "";
                     return "DOC_OLD|" + doc.id + "|" + doc.size + "|" + mime;
                 }
-
-                // FALLBACK_DOC — document object is null but media exists
                 return "FALLBACK_DOC|" + msg.id + "|0|unknown|0";
             }
 
-            // ══════ 2. Photo ══════
             if (media instanceof TLRPC.TL_messageMediaPhoto) {
                 TLRPC.Photo photo = ((TLRPC.TL_messageMediaPhoto) media).photo;
                 if (photo != null) {
-                    // PHOTO_LEGACY — نفس Python: photo_id + access_hash + dc_id
                     if (photo.access_hash != 0 && photo.id != 0 && photo.dc_id != 0)
                         return "PHOTO_LEGACY|" + photo.id + "_" + photo.access_hash + "_" + photo.dc_id;
-
-                    // PHOTO_OLD — fallback
                     return "PHOTO_OLD|" + photo.id;
                 }
-
-                // FALLBACK_PHOTO — photo object is null
                 return "FALLBACK_PHOTO|" + msg.id + "|0";
             }
 
-            // ══════ 3. أنواع media أخرى (web page, contact, geo, etc.) ══════
             if (media != null && !(media instanceof TLRPC.TL_messageMediaEmpty)) {
-                // لها media بس مو document/photo — نسوي fallback
                 return "FALLBACK_GEN|" + msg.id + "|" + msg.date + "|" + media.getClass().getSimpleName().hashCode();
             }
 
@@ -298,14 +369,10 @@ public class ForwarderEngine {
             Log.w(TAG, "computeHash: " + e.getMessage());
         }
 
-        // ══════ 4. نص بدون media ══════
         if (msg.message != null && msg.message.length() > 0) {
             return "TEXT|" + sha256(msg.message.getBytes()) + "|" + msg.date;
         }
 
-        // ══════ 5. لا media ولا نص — لا نسجل هاش ══════
-        // MSGID fallback يُستخدم فقط عند الحاجة بـ Python لرسائل خاصة
-        // بـ Java ما نحتاجه — نرجع null حتى ما يتسجل هاش فاضي
         return null;
     }
 
@@ -347,9 +414,6 @@ public class ForwarderEngine {
         return c.toDateTs <= 0 || d <= c.toDateTs + 86399;
     }
 
-    // ==========================================
-    // Helpers
-    // ==========================================
     private static String sha256(byte[] data) {
         try {
             byte[] d = MessageDigest.getInstance("SHA-256").digest(data);
