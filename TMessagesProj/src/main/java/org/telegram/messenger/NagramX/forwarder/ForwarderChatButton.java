@@ -188,7 +188,7 @@ public class ForwarderChatButton {
             public void onProgress(int sent, int total, String statusMsg) {
                 AndroidUtilities.runOnUIThread(() -> {
                     tvStatus.setText(statusMsg);
-                    if (total > 0) {
+                    if (total > 0 && sent >= 0) {
                         bar.setMax(total);
                         bar.setProgress(sent);
 
