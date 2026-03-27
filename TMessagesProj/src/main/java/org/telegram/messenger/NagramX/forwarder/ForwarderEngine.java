@@ -144,7 +144,7 @@ public class ForwarderEngine {
 
                 String hash = null;
                 if (cfg.skipDuplicates) {
-                    hash = computeHash(msg, cfg.sourceId);
+                    hash = computeHash(msg);
                     if (hash != null && hashDb.isDuplicate(hash)) { dups++; totalSkipped.incrementAndGet(); continue; }
                 }
                 if (!seen.contains(msg.id)) { seen.add(msg.id); res.add(new CM(msg.id, hash)); added++; }
@@ -237,16 +237,19 @@ public class ForwarderEngine {
     }
 
     // ==========================================
-    // ✅ computeHash v2 — نظام هاش شامل يطابق Python
+    // ✅ computeHash — منع تكرار عالمي
+    //
+    // الهاش يعتمد على المحتوى فقط — مو على الكروب المصدر
+    // نفس الصورة/الفيديو من أي كروب = نفس الهاش = يُمنع
     //
     // الترتيب (نفس Python v20.2.9):
-    // 1. DOC_LEGACY / PHOTO_LEGACY — access_hash + dc_id + id (الأكثر شيوعاً)
-    // 2. DOC_OLD / PHOTO_OLD — fallback لما access_hash = 0
-    // 3. FALLBACK_DOC / FALLBACK_PHOTO — لأنواع media غير معروفة
-    // 4. TEXT — لرسائل النص
-    // 5. MSGID — آخر fallback (chat_id + msg_id + date)
+    // 1. DOC_LEGACY / PHOTO_LEGACY — access_hash + dc_id + id
+    // 2. DOC_OLD / PHOTO_OLD — fallback
+    // 3. FALLBACK_DOC / FALLBACK_PHOTO — media بدون تفاصيل
+    // 4. TEXT — هاش المحتوى النصي
+    // 5. null — رسائل بدون محتوى (service, empty)
     // ==========================================
-    public static String computeHash(TLRPC.Message msg, long sourceId) {
+    public static String computeHash(TLRPC.Message msg) {
         if (msg == null) return null;
 
         try {
@@ -300,9 +303,10 @@ public class ForwarderEngine {
             return "TEXT|" + sha256(msg.message.getBytes()) + "|" + msg.date;
         }
 
-        // ══════ 5. MSGID — آخر fallback (نفس Python) ══════
-        // يستخدم source_id + msg_id + date — يضمن عدم التكرار
-        return "MSGID|" + sourceId + "|" + msg.id + "|" + msg.date;
+        // ══════ 5. لا media ولا نص — لا نسجل هاش ══════
+        // MSGID fallback يُستخدم فقط عند الحاجة بـ Python لرسائل خاصة
+        // بـ Java ما نحتاجه — نرجع null حتى ما يتسجل هاش فاضي
+        return null;
     }
 
     // ==========================================
