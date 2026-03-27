@@ -275,12 +275,22 @@ public class ForwarderSettingsActivity extends BaseFragment {
         }
         new AlertDialog.Builder(ctx).setTitle("📥 اختر ملف").setItems(names, (d, w) -> {
             File sel = files.get(w);
+            // عرض dialog تحميل
+            AlertDialog[] loadDlg = {new AlertDialog.Builder(ctx)
+                .setTitle("⏳ جاري الاستيراد...")
+                .setMessage("يتم استيراد الهاشات من:\n" + sel.getName() + "\n\nيرجى الانتظار...")
+                .create()};
+            loadDlg[0].setCancelable(false);
+            loadDlg[0].show();
+
             java.util.concurrent.Executors.newSingleThreadExecutor().execute(() -> {
                 int added = hashDb.importFromJson(sel);
-                AndroidUtilities.runOnUIThread(() ->
+                AndroidUtilities.runOnUIThread(() -> {
+                    try { loadDlg[0].dismiss(); } catch (Exception ignored) {}
                     new AlertDialog.Builder(ctx).setTitle(added > 0 ? "✅ استيراد" : "ℹ️ لا جديد")
-                        .setMessage(added > 0 ? "تم استيراد " + added + " هاش" : "كل الهاشات موجودة")
-                        .setPositiveButton("حسناً", null).show());
+                        .setMessage(added > 0 ? "تم استيراد " + String.format("%,d", added) + " هاش جديد" : "كل الهاشات موجودة مسبقاً")
+                        .setPositiveButton("حسناً", null).show();
+                });
             });
         }).setNegativeButton("إلغاء", null).show();
     }
