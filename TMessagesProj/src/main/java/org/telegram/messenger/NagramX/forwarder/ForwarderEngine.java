@@ -144,7 +144,7 @@ public class ForwarderEngine {
 
                 String hash = null;
                 if (cfg.skipDuplicates) {
-                    hash = computeHash(msg, cfg.strictDetection);
+                    hash = computeHash(msg, cfg.sourceId);
                     if (hash != null && hashDb.isDuplicate(hash)) { dups++; totalSkipped.incrementAndGet(); continue; }
                 }
                 if (!seen.contains(msg.id)) { seen.add(msg.id); res.add(new CM(msg.id, hash)); added++; }
@@ -237,51 +237,77 @@ public class ForwarderEngine {
     }
 
     // ==========================================
-    // ✅ computeHash — نفس ترتيب Python بالضبط
-    // DOC:   DOC_LEGACY|{dc_id}_{access_hash}_{doc_id}
-    // PHOTO: PHOTO_LEGACY|{photo_id}_{access_hash}_{dc_id}
+    // ✅ computeHash v2 — نظام هاش شامل يطابق Python
+    //
+    // الترتيب (نفس Python v20.2.9):
+    // 1. DOC_LEGACY / PHOTO_LEGACY — access_hash + dc_id + id (الأكثر شيوعاً)
+    // 2. DOC_OLD / PHOTO_OLD — fallback لما access_hash = 0
+    // 3. FALLBACK_DOC / FALLBACK_PHOTO — لأنواع media غير معروفة
+    // 4. TEXT — لرسائل النص
+    // 5. MSGID — آخر fallback (chat_id + msg_id + date)
     // ==========================================
-    public static String computeHash(TLRPC.Message msg, boolean strict) {
+    public static String computeHash(TLRPC.Message msg, long sourceId) {
         if (msg == null) return null;
-
-        // نص بدون media
-        if (msg.media == null || msg.media instanceof TLRPC.TL_messageMediaEmpty) {
-            if (msg.message != null && msg.message.length() > 0)
-                return "TEXT|" + sha256(msg.message.getBytes()) + "|" + msg.date;
-            return null;
-        }
 
         try {
             TLRPC.MessageMedia media = msg.media;
 
+            // ══════ 1. Document (فيديو، صوت، ملف، GIF، ستكر) ══════
             if (media instanceof TLRPC.TL_messageMediaDocument) {
                 TLRPC.Document doc = ((TLRPC.TL_messageMediaDocument) media).document;
-                if (doc == null) return null;
+                if (doc != null) {
+                    // DOC_LEGACY — الطريقة الرئيسية (92% من هاشاتك)
+                    if (doc.access_hash != 0 && doc.dc_id != 0)
+                        return "DOC_LEGACY|" + doc.dc_id + "_" + doc.access_hash + "_" + doc.id;
 
-                // strict: unique_id أولاً (مثل Python)
-                // ما نستخدمه لأن Telegram Java ما يوفر unique_id مباشرة
-                // نروح لـ DOC_LEGACY مباشرة
+                    // DOC_OLD — fallback
+                    String mime = doc.mime_type != null ? doc.mime_type : "";
+                    return "DOC_OLD|" + doc.id + "|" + doc.size + "|" + mime;
+                }
 
-                // ✅ DOC_LEGACY — نفس Python: dc_id + access_hash + doc_id
-                if (doc.access_hash != 0 && doc.dc_id != 0)
-                    return "DOC_LEGACY|" + doc.dc_id + "_" + doc.access_hash + "_" + doc.id;
-
-                return "DOC_OLD|" + doc.id + "|" + doc.size + "|" + doc.mime_type;
-
-            } else if (media instanceof TLRPC.TL_messageMediaPhoto) {
-                TLRPC.Photo photo = ((TLRPC.TL_messageMediaPhoto) media).photo;
-                if (photo == null) return null;
-
-                // ✅ PHOTO_LEGACY — نفس Python: photo_id + access_hash + dc_id
-                if (photo.access_hash != 0 && photo.id != 0 && photo.dc_id != 0)
-                    return "PHOTO_LEGACY|" + photo.id + "_" + photo.access_hash + "_" + photo.dc_id;
-
-                return "PHOTO_OLD|" + photo.id;
+                // FALLBACK_DOC — document object is null but media exists
+                return "FALLBACK_DOC|" + msg.id + "|0|unknown|0";
             }
-        } catch (Exception e) { Log.w(TAG, "hash: " + e.getMessage()); }
-        return null;
+
+            // ══════ 2. Photo ══════
+            if (media instanceof TLRPC.TL_messageMediaPhoto) {
+                TLRPC.Photo photo = ((TLRPC.TL_messageMediaPhoto) media).photo;
+                if (photo != null) {
+                    // PHOTO_LEGACY — نفس Python: photo_id + access_hash + dc_id
+                    if (photo.access_hash != 0 && photo.id != 0 && photo.dc_id != 0)
+                        return "PHOTO_LEGACY|" + photo.id + "_" + photo.access_hash + "_" + photo.dc_id;
+
+                    // PHOTO_OLD — fallback
+                    return "PHOTO_OLD|" + photo.id;
+                }
+
+                // FALLBACK_PHOTO — photo object is null
+                return "FALLBACK_PHOTO|" + msg.id + "|0";
+            }
+
+            // ══════ 3. أنواع media أخرى (web page, contact, geo, etc.) ══════
+            if (media != null && !(media instanceof TLRPC.TL_messageMediaEmpty)) {
+                // لها media بس مو document/photo — نسوي fallback
+                return "FALLBACK_GEN|" + msg.id + "|" + msg.date + "|" + media.getClass().getSimpleName().hashCode();
+            }
+
+        } catch (Exception e) {
+            Log.w(TAG, "computeHash: " + e.getMessage());
+        }
+
+        // ══════ 4. نص بدون media ══════
+        if (msg.message != null && msg.message.length() > 0) {
+            return "TEXT|" + sha256(msg.message.getBytes()) + "|" + msg.date;
+        }
+
+        // ══════ 5. MSGID — آخر fallback (نفس Python) ══════
+        // يستخدم source_id + msg_id + date — يضمن عدم التكرار
+        return "MSGID|" + sourceId + "|" + msg.id + "|" + msg.date;
     }
 
+    // ==========================================
+    // فلاتر
+    // ==========================================
     private boolean passFilter(TLRPC.Message msg, ForwardConfig c) {
         boolean any = c.mediaOnly || c.photoOnly || c.videoOnly || c.audioOnly || c.gifOnly;
         if (!any) return true;
@@ -317,6 +343,9 @@ public class ForwarderEngine {
         return c.toDateTs <= 0 || d <= c.toDateTs + 86399;
     }
 
+    // ==========================================
+    // Helpers
+    // ==========================================
     private static String sha256(byte[] data) {
         try {
             byte[] d = MessageDigest.getInstance("SHA-256").digest(data);
