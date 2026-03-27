@@ -46,6 +46,38 @@ public class ForwarderChatButton {
     private static void showConfirmDialog(BaseFragment fragment, long sourceId, long targetId) {
         Context ctx = fragment.getParentActivity();
         if (ctx == null) return;
+
+        // ✅ فحص حالة محفوظة
+        ForwarderEngine.SavedState saved = ForwarderEngine.getSavedState(sourceId, targetId);
+        if (saved != null && saved.sentCount > 0) {
+            MessagesController mc2 = MessagesController.getInstance(UserConfig.selectedAccount);
+            new AlertDialog.Builder(ctx)
+                .setTitle("⏩ عملية سابقة")
+                .setMessage(
+                    "📥 " + getChatName(mc2, sourceId) + " → " + getChatName(mc2, targetId) + "\n\n" +
+                    "✅ تم تحويل: " + String.format("%,d", saved.sentCount) + " رسالة\n" +
+                    "📊 الإجمالي: " + String.format("%,d", saved.totalCollected) + "\n" +
+                    "⏱️ منذ: " + saved.getAge() + "\n\n" +
+                    "تريد تكمل أو تبدي من جديد؟"
+                )
+                .setPositiveButton("🔄 أكمل", (d, w) -> {
+                    d.dismiss();
+                    startEngineWithResume(fragment, sourceId, targetId, ctx, saved.lastSentIndex);
+                })
+                .setNeutralButton("🆕 من جديد", (d, w) -> {
+                    d.dismiss();
+                    ForwarderEngine.clearState(sourceId, targetId);
+                    showConfirmDialogInner(fragment, sourceId, targetId, ctx);
+                })
+                .setNegativeButton("إلغاء", null)
+                .show();
+            return;
+        }
+
+        showConfirmDialogInner(fragment, sourceId, targetId, ctx);
+    }
+
+    private static void showConfirmDialogInner(BaseFragment fragment, long sourceId, long targetId, Context ctx) {
         MessagesController mc = MessagesController.getInstance(UserConfig.selectedAccount);
         final long[] ids = {sourceId, targetId};
 
@@ -124,10 +156,19 @@ public class ForwarderChatButton {
     // ==========================================
     // startEngine — مع progress محسّن
     // ==========================================
+    private static void startEngineWithResume(BaseFragment fragment, long sourceId, long targetId, Context ctx, int resumeIndex) {
+        startEngineInternal(fragment, sourceId, targetId, ctx, resumeIndex);
+    }
+
     private static void startEngine(BaseFragment fragment, long sourceId, long targetId, Context ctx) {
+        startEngineInternal(fragment, sourceId, targetId, ctx, 0);
+    }
+
+    private static void startEngineInternal(BaseFragment fragment, long sourceId, long targetId, Context ctx, int resumeIndex) {
         ForwarderHashDatabase hashDb = ForwarderHashDatabase.getInstance();
         ForwarderEngine engine = new ForwarderEngine(hashDb);
         ForwarderEngine.ForwardConfig config = ForwarderSettingsActivity.buildConfig(ctx, sourceId, targetId);
+        config.resumeFromIndex = resumeIndex;
 
         // بناء Progress Dialog محسّن
         android.widget.LinearLayout layout = new android.widget.LinearLayout(ctx);
