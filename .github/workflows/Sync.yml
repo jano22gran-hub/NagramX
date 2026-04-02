@@ -16,5 +16,5 @@ jobs:
         run: |
           git remote add upstream https://github.com/risin42/NagramX.git
           git fetch upstream
-          git merge upstream/main --no-edit --strategy-option=ours
-          git push origin main
+          git merge upstream/base --no-edit --strategy-option=ours
+          git push origin base
