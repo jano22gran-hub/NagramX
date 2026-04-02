@@ -18,5 +18,8 @@ jobs:
           git config user.name "GitHub Actions"
           git remote add upstream https://github.com/risin42/NagramX.git
           git fetch upstream
-          git merge upstream/base --no-edit --strategy-option=ours
+          git merge upstream/base --no-edit --strategy-option=ours || true
+          git checkout --ours .
+          git add .
+          git commit -m "Sync upstream (keep local changes)" || true
           git push origin base
