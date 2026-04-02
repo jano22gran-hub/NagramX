@@ -322,5 +322,6 @@
     <string name="PasscodeShowMessagePreviewWhenLockedAbout">Показувати вміст сповіщень навіть під час блокування паролем.</string>
     <string name="StickerSavedHint">Стікер збережено в галереї.</string>
     <string name="StickerCopied">Стікер скопійовано в буфер обміну.</string>
+    <string name="StrokeOnViews">Ефекти відблисків</string>
     <string name="HideBottomNavigationBar">Приховати нижню панель навігації</string>
 </resources>

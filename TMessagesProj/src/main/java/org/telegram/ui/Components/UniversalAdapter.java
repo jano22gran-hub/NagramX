@@ -419,6 +419,7 @@ public class UniversalAdapter extends AdapterWithDiffUtils {
                 if (viewType == VIEW_TYPE_CHECKRIPPLE) {
                     cell.setDrawCheckRipple(true);
                     cell.setColors(Theme.key_windowBackgroundCheckText, Theme.key_switchTrackBlue, Theme.key_switchTrackBlueChecked, Theme.key_switchTrackBlueThumb, Theme.key_switchTrackBlueThumbChecked);
+                    cell.getCheckBox().setSeparateTrackColorKey(Theme.key_windowBackgroundWhite);
                     cell.setTypeface(AndroidUtilities.bold());
                     cell.setHeight(56);
                 }

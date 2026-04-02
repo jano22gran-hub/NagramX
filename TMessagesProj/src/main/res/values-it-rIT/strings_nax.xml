@@ -133,7 +133,7 @@
     <string name="DisableGhostMode">Disabilita Ghost</string>
     <string name="GhostModeEnabled">Modalità Ghost attivata</string>
     <string name="GhostModeDisabled">Modalità Ghost disattivata</string>
-    <string name="GhostModeInDrawer">Scorciatoia scheda principale</string>
+    <string name="GhostModeInDrawer">Scorciatoia</string>
     <string name="GhostModeStatusIndicator">Indicatore Modalità Fantasma</string>
     <string name="DontSendReadMessagePackets">Non Leggere Messaggi</string>
     <string name="DontReadStoriesPackets">Non Leggere Storie</string>
@@ -328,4 +328,5 @@ Non possiamo aiutarti in questo caso; se hai problemi di accesso, contatta il Su
     <string name="StickerSavedHint">Sticker salvato nella galleria.</string>
     <string name="StickerCopied">Sticker copiato negli appunti.</string>
     <string name="StrokeOnViews">Effetti di riflesso</string>
+    <string name="HideBottomNavigationBar">Nascondi barra di navigazione inferiore</string>
 </resources>

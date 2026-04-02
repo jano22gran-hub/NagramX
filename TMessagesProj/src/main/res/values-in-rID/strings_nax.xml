@@ -133,7 +133,7 @@
     <string name="DisableGhostMode">Nonaktifkan Hantu</string>
     <string name="GhostModeEnabled">Mode hantu diaktifkan</string>
     <string name="GhostModeDisabled">Mode hantu dinonaktifkan</string>
-    <string name="GhostModeInDrawer">Pintasan Tab Utama</string>
+    <string name="GhostModeInDrawer">Pintasan</string>
     <string name="GhostModeStatusIndicator">Indikator Mode Hantu</string>
     <string name="DontSendReadMessagePackets">Jangan Baca Pesan</string>
     <string name="DontReadStoriesPackets">Jangan Baca Cerita</string>
@@ -324,4 +324,5 @@
     <string name="StickerSavedHint">Stiker disimpan ke galeri.</string>
     <string name="StickerCopied">Stiker disalin ke papan klip.</string>
     <string name="StrokeOnViews">Efek silau</string>
+    <string name="HideBottomNavigationBar">Sembunyikan Bilah Navigasi Bawah</string>
 </resources>

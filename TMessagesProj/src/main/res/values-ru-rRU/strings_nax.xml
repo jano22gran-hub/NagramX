@@ -133,7 +133,7 @@
     <string name="DisableGhostMode">Отключить «Призрака»</string>
     <string name="GhostModeEnabled">Режим «Призрака» включён</string>
     <string name="GhostModeDisabled">Режим «Призрака» выключен</string>
-    <string name="GhostModeInDrawer">Ярлык на вкладке «Настройки»</string>
+    <string name="GhostModeInDrawer">Быстрый доступ</string>
     <string name="GhostModeStatusIndicator">Индикатор режима «Призрака»</string>
     <string name="DontSendReadMessagePackets">Не читать сообщения</string>
     <string name="DontReadStoriesPackets">Не читать истории</string>

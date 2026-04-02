@@ -57,6 +57,7 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.collection.LongSparseArray;
+import androidx.core.graphics.ColorUtils;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.recyclerview.widget.RecyclerView;
@@ -146,6 +147,7 @@ import me.vkryl.android.animator.BoolAnimator;
 import me.vkryl.android.animator.FactorAnimator;
 import tw.nekomimi.nekogram.NekoConfig;
 import tw.nekomimi.nekogram.helpers.MainTabsHelper;
+import tw.nekomimi.nekogram.helpers.MonetHelper;
 import tw.nekomimi.nekogram.helpers.PasscodeHelper;
 import tw.nekomimi.nekogram.helpers.remote.UpdateHelper;
 import tw.nekomimi.nekogram.settings.NekoSettingsActivity;
@@ -466,7 +468,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         cameraButton.setBackground(Theme.createCircleDrawable(dp(32), getThemedColor(Theme.key_windowBackgroundGray)));
         cameraButton.setPadding(dp(2), dp(2), dp(2), dp(2));
         cameraBackground = new FrameLayout(context);
-        cameraBackground.setBackground(Theme.createCircleDrawable(dp(30), getThemedColor(Theme.key_featuredStickers_addButton)));
+        cameraBackground.setBackground(Theme.createCircleDrawable(dp(30), getThemedColor(Theme.getActiveTheme().isMonetNight() ? Theme.key_featuredStickers_unread : Theme.key_featuredStickers_addButton)));
         cameraImageView = new ImageView(context);
         cameraImageView.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         cameraImageView.setImageResource(R.drawable.filled_premium_camera);
@@ -1233,6 +1235,12 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             iconView.setVisibility(icon != 0 ? View.VISIBLE : View.GONE);
             titleView.setTranslationX(icon == 0 ? dp(2) : 0);
             subtitleView.setTranslationX(icon == 0 ? dp(2) : 0);
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && Theme.getActiveTheme().isMonet()) {
+                int flatHarmonizedColor = MonetHelper.harmonizeColor(ColorUtils.blendARGB(iconColorTop, iconColorBottom, 0.5f));
+                iconColorTop = flatHarmonizedColor;
+                iconColorBottom = flatHarmonizedColor;
+            }
 
             iconBackground.setColor(iconColorTop, iconColorBottom);
             iconView.setImageResource(icon);

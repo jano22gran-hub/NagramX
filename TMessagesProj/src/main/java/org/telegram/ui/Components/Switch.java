@@ -71,6 +71,7 @@ public class Switch extends View {
     private int trackCheckedColorKey = Theme.key_switch2TrackChecked;
     private int thumbColorKey = Theme.key_windowBackgroundWhite;
     private int thumbCheckedColorKey = Theme.key_windowBackgroundWhite;
+    private int separateTrackColorKey = -1;
 
     private Drawable iconDrawable;
     private int lastIconColor;
@@ -258,6 +259,14 @@ public class Switch extends View {
         thumbCheckedColorKey = thumbChecked;
     }
 
+    public void setSeparateTrackColorKey(int separateTrackColorKey) {
+        if (this.separateTrackColorKey == separateTrackColorKey) {
+            return;
+        }
+        this.separateTrackColorKey = separateTrackColorKey;
+        invalidate();
+    }
+
     private void animateToCheckedState(boolean newCheckedState) {
         checkAnimator = ObjectAnimator.ofFloat(this, "progress", newCheckedState ? 1 : 0);
         checkAnimator.setDuration(200);
@@ -432,8 +441,8 @@ public class Switch extends View {
         int trackCheckedFillKey = trackCheckedColorKey;
         int thumbCheckedKey = thumbCheckedColorKey;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && MonetHelper.useMonetMd3Colors()) {
-            trackCheckedFillKey = Theme.key_featuredStickers_addButton;
-            thumbCheckedKey = Theme.getActiveTheme().isMonetDark() || Theme.getActiveTheme().isMonetAmoled()
+            trackCheckedFillKey = Theme.key_dialogRoundCheckBox;
+            thumbCheckedKey = Theme.getActiveTheme().isMonetNight()
                     ? Theme.key_statisticChartRipple // a1_800
                     : Theme.key_chat_outInstant; // a1_10
         }
@@ -463,7 +472,7 @@ public class Switch extends View {
             color2 = processColor(Theme.getColor(trackCheckedFillKey, resourcesProvider));
 
             if (isUsingSeparateView) {
-                color1 = Color.TRANSPARENT;
+                color1 = separateTrackColorKey >= 0 ? processColor(Theme.getColor(separateTrackColorKey, resourcesProvider)) : Color.TRANSPARENT;
             }
 
             if (a == 0 && iconDrawable != null && lastIconColor != (isChecked ? color2 : color1)) {

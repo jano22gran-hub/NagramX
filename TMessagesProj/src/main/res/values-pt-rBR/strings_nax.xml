@@ -133,7 +133,7 @@
     <string name="DisableGhostMode">Desativar fantasma</string>
     <string name="GhostModeEnabled">Modo fantasma ativado</string>
     <string name="GhostModeDisabled">Modo fantasma desativado</string>
-    <string name="GhostModeInDrawer">Atalho na aba principal</string>
+    <string name="GhostModeInDrawer">Atalho</string>
     <string name="GhostModeStatusIndicator">Indicador do modo fantasma</string>
     <string name="DontSendReadMessagePackets">Não ler mensagens</string>
     <string name="DontReadStoriesPackets">Não visualizar stories</string>

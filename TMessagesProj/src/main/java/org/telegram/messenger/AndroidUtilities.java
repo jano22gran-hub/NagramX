@@ -532,7 +532,7 @@ public class AndroidUtilities {
         int i = s.indexOf(query);
         while (i >= 0) {
             try {
-                spannableStringBuilder.setSpan(new ForegroundColorSpanThemable(Theme.key_windowBackgroundWhiteBlueText4, resourcesProvider), i, Math.min(i + query.length(), str.length()), 0);
+                spannableStringBuilder.setSpan(new ForegroundColorSpanThemable(Theme.getActiveTheme().isMonetLight() ? Theme.key_chats_actionBackground : Theme.key_windowBackgroundWhiteBlueText4, resourcesProvider), i, Math.min(i + query.length(), str.length()), 0);
             } catch (Exception e) {
                 FileLog.e(e);
             }

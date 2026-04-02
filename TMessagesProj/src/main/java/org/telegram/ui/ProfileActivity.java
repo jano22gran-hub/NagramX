@@ -12313,6 +12313,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 if (myProfile) {
                     setUsernameItem = otherItem.addSubItem(set_username, R.drawable.menu_username_change, getString(R.string.ProfileUsernameEdit));
                     linkItem = otherItem.addSubItem(copy_link_profile, R.drawable.msg_link2, getString(R.string.ProfileCopyLink));
+                    otherItem.addSubItem(clear_cache, R.drawable.msg_delete, getString(R.string.ClearCache));
                     updateItemsUsername();
                 }
                 selfUser = true;
@@ -12687,7 +12688,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     }
 
     private void createGhostModeExclusionItem(long chatId) {
-        if (ChatObject.isChannelAndNotMegaGroup(currentChat)) {
+        if (!NekoConfig.showGhostInDrawer.Bool() || ChatObject.isChannelAndNotMegaGroup(currentChat)) {
             return;
         }
         if (currentEncryptedChat instanceof TLRPC.TL_encryptedChat) {

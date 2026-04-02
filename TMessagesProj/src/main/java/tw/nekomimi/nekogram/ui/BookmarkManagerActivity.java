@@ -196,7 +196,7 @@ public class BookmarkManagerActivity extends BaseFragment {
         });
 
         ActionBarMenu menu = actionBar.createMenu();
-        searchItem = menu.addItem(SEARCH_BUTTON, R.drawable.ic_ab_search).setIsSearchField(true);
+        searchItem = menu.addItem(SEARCH_BUTTON, R.drawable.outline_header_search).setIsSearchField(true);
         searchItem.setSearchFieldHint(getString(R.string.Search));
         searchItem.setActionBarMenuItemSearchListener(new ActionBarMenuItem.ActionBarMenuItemSearchListener() {
             @Override

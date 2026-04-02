@@ -11050,7 +11050,7 @@ if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
     }
 
     private void updateAudioVideoSendButtonColor() {
-        if (audioVideoSendButton == null) {
+        if (audioVideoSendButton == null || audioVideoButtonContainer == null) {
             return;
         }
         boolean isMenuState = audioVideoSendButton.getCurrentState() == ChatActivityEnterViewAnimatedIconView.State.MENU;
@@ -11058,6 +11058,9 @@ if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
                 ? getThemedColor(Theme.key_glass_defaultIcon)
                 : Color.WHITE;
         audioVideoSendButton.setColorFilter(new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN));
+        audioVideoButtonContainer.setBackground(isMenuState
+                ? Theme.createSelectorDrawable(getThemedColor(Theme.key_listSelector))
+                : null);
     }
 
     private void updateRecordedDeleteIconColors() {

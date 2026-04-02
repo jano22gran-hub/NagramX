@@ -14007,9 +14007,12 @@ public class ArticleViewer implements NotificationCenter.NotificationCenterDeleg
                 actionBar.showAddress(false, true);
                 return true;
             }
-            if (isFirstArticle() && pages[0].hasBackButton()) {
-                pages[0].back();
-                return true;
+            if (pages != null && pages.length > 0 && pages[0] != null && pages[0].isWeb()) {
+                BotWebViewContainer.MyWebView webView = pages[0].getWebView();
+                if (webView != null && webView.canGoBack()) {
+                    webView.goBack();
+                    return true;
+                }
             }
             if (pagesStack.size() > 1) {
                 goBack();

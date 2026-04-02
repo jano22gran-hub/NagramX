@@ -133,7 +133,7 @@
     <string name="DisableGhostMode">Hayaleti Devre Dışı Bırak</string>
     <string name="GhostModeEnabled">Hayalet modu açıldı</string>
     <string name="GhostModeDisabled">Hayalet modu kapatıldı</string>
-    <string name="GhostModeInDrawer">Ana Sekme Kısayolu</string>
+    <string name="GhostModeInDrawer">Kısayol</string>
     <string name="GhostModeStatusIndicator">Hayalet Modu Göstergesi</string>
     <string name="DontSendReadMessagePackets">Mesajları Okundu İşaretleme</string>
     <string name="DontReadStoriesPackets">Hikayeleri Okundu İşaretleme</string>
@@ -324,4 +324,5 @@
     <string name="StickerSavedHint">Çıkartma galeriye kaydedildi.</string>
     <string name="StickerCopied">Çıkartma panoya kopyalandı.</string>
     <string name="StrokeOnViews">Parlama efektleri</string>
+    <string name="HideBottomNavigationBar">Alt Gezinme Çubuğunu Gizle</string>
 </resources>
