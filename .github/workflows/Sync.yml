@@ -22,4 +22,4 @@ jobs:
           git checkout --ours .
           git add .
           git commit -m "Sync upstream (keep local changes)" || true
-          git push origin base
+          git push origin dev
