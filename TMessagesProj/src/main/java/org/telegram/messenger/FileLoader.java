@@ -30,8 +30,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import com.radolyn.ayugram.utils.AyuFileLocation;
-
 public class FileLoader extends BaseController {
 
     private static final int PRIORITY_STREAM = 4;

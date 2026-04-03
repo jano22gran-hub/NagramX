@@ -713,6 +713,9 @@ public class ChatAvatarContainer extends FrameLayout implements NotificationCent
                 if (UserObject.isBotForum(user)) {
                     args.putLong("topic_id", parentFragment.getTopicId());
                 }
+                if (UserObject.isBotForum(user)) {
+                    args.putLong("topic_id", parentFragment.getTopicId());
+                }
                 args.putBoolean("reportSpam", parentFragment.hasReportSpam());
                 args.putInt("actionBarColor", getThemedColor(Theme.key_actionBarDefault));
                 final ProfileActivity fragment = new ProfileActivity(args, sharedMediaPreloader);

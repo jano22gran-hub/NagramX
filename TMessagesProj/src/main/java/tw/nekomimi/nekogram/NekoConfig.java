@@ -12,19 +12,14 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.util.Base64;
-import android.util.Pair;
-
-import com.radolyn.ayugram.utils.AyuGhostUtils;
 
 import org.telegram.messenger.ApplicationLoader;
 
 import java.io.ByteArrayInputStream;
 import java.io.ObjectInputStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 import tw.nekomimi.nekogram.config.ConfigItem;
@@ -83,7 +78,6 @@ public class NekoConfig {
     // From NekoConfig
     public static ConfigItem useIPv6 = addConfig("IPv6", configTypeBool, false);
     public static ConfigItem hidePhone = addConfig("HidePhone", configTypeBool, true);
-    public static ConfigItem ignoreBlocked = addConfig("IgnoreBlocked", configTypeBool, false);
     public static ConfigItem tabletMode = addConfig("TabletMode", configTypeInt, 0);
 
     public static ConfigItem typeface = addConfig("TypefaceUseDefault", configTypeBool, false);
@@ -113,6 +107,7 @@ public class NekoConfig {
     public static ConfigItem rearVideoMessages = addConfig("RearVideoMessages", configTypeBool, false);
     public static ConfigItem hideAllTab = addConfig("HideAllTab", configTypeBool, false);
 
+    public static ConfigItem disableChatAction = addConfig("DontSendUploadProgress", configTypeBool, false);
     public static ConfigItem sortByUnread = addConfig("sort_by_unread", configTypeBool, false);
     public static ConfigItem sortByUnmuted = addConfig("sort_by_unmuted", configTypeBool, true);
     public static ConfigItem sortByUser = addConfig("sort_by_user", configTypeBool, true);

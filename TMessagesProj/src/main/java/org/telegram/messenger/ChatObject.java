@@ -1934,11 +1934,7 @@ public class ChatObject {
     }
 
     public static boolean isNotInChat(TLRPC.Chat chat) {
-        if (!NaConfig.INSTANCE.getEnableSaveDeletedMessages().Bool()) {
-            return chat == null || chat instanceof TLRPC.TL_chatEmpty || chat instanceof TLRPC.TL_chatForbidden || chat instanceof TLRPC.TL_channelForbidden || chat.left || chat.kicked || chat.deactivated;
-        }
-
-        return chat == null || chat.left;
+        return chat == null || chat instanceof TLRPC.TL_chatEmpty || chat instanceof TLRPC.TL_chatForbidden || chat instanceof TLRPC.TL_channelForbidden || chat.left || chat.kicked || chat.deactivated;
     }
 
     public static boolean isInChat(TLRPC.Chat chat) {

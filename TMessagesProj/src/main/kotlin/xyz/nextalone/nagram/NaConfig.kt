@@ -607,7 +607,7 @@ object NaConfig {
         addConfig(
             "HideHelpSection",
             ConfigItem.configTypeBool,
-            true
+            false
         )
     val llmApiUrl =
         addConfig(
@@ -779,7 +779,7 @@ object NaConfig {
         )
     val translucentDeletedMessages =
         addConfig(
-            "TranslucentDeletedMessages",
+            "LlmUseContext",
             ConfigItem.configTypeBool,
             true
         )
@@ -848,12 +848,6 @@ object NaConfig {
             "ConfirmAllLinks",
             ConfigItem.configTypeBool,
             false
-        )
-    val useDeletedIcon =
-        addConfig(
-            "UseDeletedIcon",
-            ConfigItem.configTypeBool,
-            true
         )
     val useEditedIcon =
         addConfig(

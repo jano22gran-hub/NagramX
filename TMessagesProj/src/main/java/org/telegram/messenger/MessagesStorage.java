@@ -28,7 +28,6 @@ import android.util.SparseArray;
 import android.util.SparseIntArray;
 
 import androidx.annotation.UiThread;
-
 import androidx.collection.LongSparseArray;
 
 import org.telegram.PhoneFormat.PhoneFormat;
@@ -4642,14 +4641,6 @@ public class MessagesStorage extends BaseController {
                             if (!addFilesToDelete(message, filesToDelete, idsToDelete, namesToDelete, true)) {
                                 continue;
                             } else {
-                                // --- AyuGram hook
-                                if (NaConfig.INSTANCE.getEnableSaveEditsHistory().Bool()) {
-                                    var prefs = new AyuSavePreferences(message, currentAccount);
-                                    prefs.setDialogId(dialogId);
-                                    AyuMessagesController.getInstance().onMessageEditedForce(prefs);
-                                }
-                                // --- AyuGram hook
-
                                 if (message.media.document != null) {
                                     message.media.document = new TLRPC.TL_documentEmpty();
                                 } else if (message.media.photo != null) {

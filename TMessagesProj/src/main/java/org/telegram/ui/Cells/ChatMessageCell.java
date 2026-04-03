@@ -122,7 +122,6 @@ import org.telegram.messenger.MediaController;
 import org.telegram.messenger.MediaDataController;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
-import org.telegram.messenger.MessagesStorage;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
 import org.telegram.messenger.SendMessagesHelper;
@@ -1694,7 +1693,6 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
 
     public final TransitionParams transitionParams = new TransitionParams();
     private boolean edited;
-    private boolean ayuDeleted;
     private boolean imageDrawn;
     private boolean photoImageOutOfBounds;
 
@@ -17650,13 +17648,10 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         }
         if (messageObject.scheduled || messageObject.isLiveLocation() || messageObject.messageOwner.edit_hide || messageObject.getDialogId() == 777000 || messageObject.messageOwner.via_bot_id != 0 || messageObject.messageOwner.via_bot_name != null || author != null && author.bot) {
             edited = false;
-            ayuDeleted = ayuDeletedVal && !(currentChat instanceof TLRPC.TL_chat && author != null && author.bot); // ensure we're not in PM with bot, as it can screw experience
         } else if (currentPosition == null || currentMessagesGroup == null || currentMessagesGroup.messages.isEmpty()) {
             edited = (messageObject.messageOwner.flags & TLRPC.MESSAGE_FLAG_EDITED) != 0 || messageObject.isEditing();
-            ayuDeleted = ayuDeletedVal;
         } else {
             edited = false;
-            ayuDeleted = ayuDeletedVal;
             hasReplies = currentMessagesGroup.messages.get(0).hasReplies();
             if (!currentMessagesGroup.messages.get(0).messageOwner.edit_hide) {
                 for (int a = 0, size = currentMessagesGroup.messages.size(); a < size; a++) {
@@ -17778,9 +17773,6 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         if (timeString instanceof SpannableStringBuilder) {
             if (edited && NaConfig.INSTANCE.getUseEditedIcon().Bool() && TimeStringHelper.editedDrawable != null) {
                 timeTextWidth = timeWidth += TimeStringHelper.editedDrawable.getIntrinsicWidth();
-            }
-            if (ayuDeleted && NaConfig.INSTANCE.getUseDeletedIcon().Bool() && TimeStringHelper.deletedDrawable != null) {
-                timeTextWidth = timeWidth += TimeStringHelper.deletedDrawable.getIntrinsicWidth();
             }
             if (translated && TimeStringHelper.translatedDrawable != null) {
                 timeTextWidth = timeWidth += TimeStringHelper.translatedDrawable.getIntrinsicWidth();
@@ -19535,6 +19527,8 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         if (shouldTranslucentDeleted() && ayuDeleted) {
             canvas.restore();
         }
+
+        canvas.restoreToCount(restore);
     }
 
     @SuppressLint("WrongCall")
@@ -19837,9 +19831,6 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                     } else {
                         currentSelectedBackgroundAlpha = 0;
                         currentBackgroundDrawable.setAlpha((int) (255 * alphaInternal));
-                        if (NaConfig.INSTANCE.getTranslucentDeletedMessages().Bool() && ayuDeleted && currentMessageObject.isOutOwner()) {
-                            currentBackgroundDrawable.setAlpha((int) (255 * 0.75f));
-                        }
                         currentBackgroundDrawable.drawCached(canvas, backgroundCacheParams);
                     }
                 }
@@ -27001,7 +26992,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             lastDrawingSideMenuEnabled = isSideMenuEnabled;
             lastDrawingTextBlocks = currentMessageObject != null ? currentMessageObject.textLayoutBlocks : null;
             lastDrawingTextWidth = currentMessageObject != null ? currentMessageObject.textWidth : 0;
-            lastDrawingEdited = edited || ayuDeleted;
+            lastDrawingEdited = edited;
 
             lastDrawingCaptionX = captionX;
             lastDrawingCaptionY = captionY;
@@ -27188,20 +27179,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                     changed = true;
                 }
             }
-            if ((((edited || ayuDeleted) && !lastDrawingEdited) || (currentMessageObject.translated && !lastTranslated)) && timeLayout != null) {
+            if (((edited && !lastDrawingEdited) || (currentMessageObject.translated && !lastTranslated)) && timeLayout != null) {
                 String customStr = NaConfig.INSTANCE.getCustomEditedMessage().String();
-                String customStrFin = customStr.equals("") ? getString(R.string.EditedMessage) : customStr;
-                String deletedStr = NaConfig.INSTANCE.getCustomDeletedMark().String();
-                String deletedStrFin = deletedStr.equals("") ? getString(R.string.DeletedMessage) : deletedStr;
-                String editedStr;
-                if (edited && !ayuDeleted){
-                    editedStr = customStrFin;
-                } else if (!edited) {
-                    editedStr = deletedStrFin;
-                } else {
-                    // it's both edited and deleted
-                    editedStr = customStrFin + " " + deletedStrFin;
-                }
+                String editedStr = TextUtils.isEmpty(customStr) ? getString(R.string.EditedMessage) : customStr;
                 CharSequence text = timeLayout.getText();
                 int i = text.toString().indexOf(editedStr);
                 if (i >= 0) {
@@ -27225,7 +27205,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                     changed = true;
                 }
                 accessibilityText = null;
-            } else if (((!(edited || ayuDeleted) && lastDrawingEdited) || (!currentMessageObject.translated && lastTranslated)) && timeLayout != null) {
+            } else if (((!edited && lastDrawingEdited) || (!currentMessageObject.translated && lastTranslated)) && timeLayout != null) {
                 animateTimeLayout = lastTimeLayout;
                 animateEditedWidthDiff = timeWidth - lastTimeWidth;
                 animateEditedEnter = true;

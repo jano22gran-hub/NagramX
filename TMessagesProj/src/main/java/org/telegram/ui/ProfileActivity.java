@@ -11566,11 +11566,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                     if (userInfo != null && userInfo.stars_rating != null && userInfo.stars_rating.stars < 0) {
                         newString2 = getString(R.string.StarRatingLevelNegative).toLowerCase(Locale.ROOT);
                     } else {
-                        if (!NekoConfig.sendOnlinePackets.Bool() || NekoConfig.sendOfflinePacketAfterOnline.Bool()) {
-                            newString2 = getString(R.string.VoipOfflineTitle);
-                        } else {
-                            newString2 = LocaleController.getString(R.string.Online);
-                        }
+                        newString2 = LocaleController.getString(R.string.Online);
                     }
                 }
             } else if (user.id == UserObject.VERIFY) {

@@ -2010,19 +2010,19 @@ public class ChatActivity extends BaseFragment implements
                         }
                         break;
                     case DoubleTap.DOUBLE_TAP_ACTION_REPLY:
-                        return message.getId() > 0 && allowChatActions && !isAyuDeleted;
+                        return message.getId() > 0 && allowChatActions;
                     case DoubleTap.DOUBLE_TAP_ACTION_SAVE:
-                        return !message.isSponsored() && chatMode != MODE_SCHEDULED && !message.needDrawBluredPreview() && !message.isLiveLocation() && message.type != 16 && !noforwards && !UserObject.isUserSelf(currentUser) && !isAyuDeleted;
+                        return !message.isSponsored() && chatMode != MODE_SCHEDULED && !message.needDrawBluredPreview() && !message.isLiveLocation() && message.type != 16 && !noforwards && !UserObject.isUserSelf(currentUser);
                     case DoubleTap.DOUBLE_TAP_ACTION_REPEAT:
-                        allowRepeat = allowChatActions && (currentChat == null || ((!ChatObject.isNotInChat(currentChat) || isThreadChat()) && (!ChatObject.isChannel(currentChat) || currentChat.megagroup) && ChatObject.canSendMessages(currentChat))) && !isAyuDeleted &&
+                        allowRepeat = allowChatActions && (currentChat == null || ((!ChatObject.isNotInChat(currentChat) || isThreadChat()) && (!ChatObject.isChannel(currentChat) || currentChat.megagroup) && ChatObject.canSendMessages(currentChat))) &&
                                 (!isThreadChat() && !noforwards || getMessageHelper().getMessageForRepeat(message, selectedObjectGroup) != null);
                         return allowRepeat && !message.isSponsored() && chatMode != MODE_SCHEDULED && !message.needDrawBluredPreview() && !message.isLiveLocation() && message.type != 16;
                     case DoubleTap.DOUBLE_TAP_ACTION_REPEAT_AS_COPY:
-                        allowRepeat = allowChatActions && (currentChat == null || ((!ChatObject.isNotInChat(currentChat) || isThreadChat()) && (!ChatObject.isChannel(currentChat) || currentChat.megagroup) && ChatObject.canSendMessages(currentChat))) && !isAyuDeleted &&
+                        allowRepeat = allowChatActions && (currentChat == null || ((!ChatObject.isNotInChat(currentChat) || isThreadChat()) && (!ChatObject.isChannel(currentChat) || currentChat.megagroup) && ChatObject.canSendMessages(currentChat))) &&
                                 (!isThreadChat() || getMessageHelper().getMessageForRepeat(message, selectedObjectGroup) != null);
                         return allowRepeat && !message.isSponsored() && chatMode != MODE_SCHEDULED && !message.needDrawBluredPreview() && !message.isLiveLocation() && message.type != 16;
                     case DoubleTap.DOUBLE_TAP_ACTION_EDIT:
-                        return allowEdit && !isAyuDeleted;
+                        return allowEdit;
                     case DoubleTap.DOUBLE_TAP_ACTION_DELETE:
                         return allowDelete;
                 }
@@ -12813,9 +12813,6 @@ public class ChatActivity extends BaseFragment implements
                 }
             } else {
                 str = LocaleController.getString(R.string.ForwardsRestrictedInfoBot);
-                if (hasSelectedAyuDeletedMessage) {
-                    str = LocaleController.getString(R.string.ForwardsRestrictedInfoAyuDeleted);
-                }
             }
             if (fromActionBar) {
                 if (fwdRestrictedTopHint == null) {
@@ -19817,7 +19814,7 @@ public class ChatActivity extends BaseFragment implements
                 }
 
                 if (replyItem != null) {
-                    boolean showReplyItem = !hasSelectedAyuDeletedMessage && chatMode != MODE_SCHEDULED && ChatObject.canSendMessages(currentChat) && selectedCount == 1 && NaConfig.INSTANCE.getActionBarButtonReply().Bool();
+                    boolean showReplyItem =  chatMode != MODE_SCHEDULED && ChatObject.canSendMessages(currentChat) && selectedCount == 1 && NaConfig.INSTANCE.getActionBarButtonReply().Bool();
                     boolean doShrinkActionBarItems = isActionBarTooNarrow && newCopyVisible == View.VISIBLE && canForward && canEditMessagesCount == 1 && selectedCount == 1;
                     replyItem.setVisibility(!doShrinkActionBarItems && showReplyItem);
                 }
@@ -23243,7 +23240,6 @@ public class ChatActivity extends BaseFragment implements
                 builder.setTopAnimationIsNew(true);
                 if (reason == 0) {
                     if (currentChat instanceof TLRPC.TL_channelForbidden) {
-                        if (NaConfig.INSTANCE.getEnableSaveDeletedMessages().Bool()) return;
                         builder.setTitle(LocaleController.getString(R.string.ChannelCantOpenBannedByAdminTitle));
                         builder.setMessage(LocaleController.getString(R.string.ChannelCantOpenBannedByAdmin));
                     } else {
@@ -25088,14 +25084,52 @@ public class ChatActivity extends BaseFragment implements
                 }
             }
 
-            if (AyuState.getHideSelection()) {
-                // thanks to the som fucking tg bug & poor design,
-                // I can't deselect messages rn
-                // neither they can deselect themselves
-                startMessageUnselect();
+            if (topicsTabs != null) {
+                topicsTabs.selectTopic(arg.topicId, false);
+            }
+            clearOnLoadButIsNewTopic = true; // This is a newly created topic.
+        } else if (id == NotificationCenter.botForumDraftUpdate) {
+            final BotForumHelper.BotForumTextDraftUpdateNotification arg = (BotForumHelper.BotForumTextDraftUpdateNotification) args[0];
+            if (dialog_id != arg.botUserId) return;
+            if (getTopicId() != arg.botTopicId) return;
+
+            final ArrayList<MessageObject> arr = new ArrayList<>(1);
+            arr.add(arg.messageObject);
+            replaceMessageObjects(arr, 0, true, true);
+            if (!arr.isEmpty()) {
+                processNewMessages(arr);
+            }
+        } else if (id == NotificationCenter.botForumDraftDelete) {
+            final BotForumHelper.BotForumTextDraftDeleteNotification arg = (BotForumHelper.BotForumTextDraftDeleteNotification) args[0];
+            final ArrayList<Integer> arr = new ArrayList<>(1);
+            if (dialog_id != arg.botUserId) return;
+            if (getTopicId() != arg.botTopicId) return;
+
+            arr.add(arg.messageId);
+            processDeletedMessages(arr, 0, false);
+
+            if (avatarContainer != null) {
+                avatarContainer.updateSubtitle(true);
+            }
+        } else if (id == NotificationCenter.joinedGroup) {
+            final long chatId = (long) args[0];
+            if (getDialogId() != -chatId || currentChat == null) return;
+
+            final boolean admin = currentChat.admin_rights != null;
+            final boolean owner = currentChat.creator;
+            if (ChatObject.canManageMyTag(currentChat)) {
+                BulletinFactory.of(this)
+                    .createSimpleBulletin(R.raw.contact_check, getString(R.string.JoinedGroup), getString(R.string.JoinedGroupAddTag), () -> {
+                        if (!AndroidUtilities.isContextSafe(getContext())) return;
+                        TagEditCell.showSheet(getContext(), currentAccount, -chatId, getUserConfig().getCurrentUser(), null, admin, owner, getResourceProvider());
+                    })
+                    .show(true);
+            } else {
+                BulletinFactory.of(this)
+                    .createSimpleBulletin(R.raw.contact_check, getString(R.string.JoinedGroup))
+                    .show(true);
             }
         }
-        // --- AyuGram hook (ayuDeleted)
     }
 
     private AlertDialog quoteMessageUpdateAlert;
@@ -26667,13 +26701,6 @@ public class ChatActivity extends BaseFragment implements
         for (int a = 0; a < size; a++) {
             Integer mid = markAsDeletedMessages.get(a);
             MessageObject obj = chatAdapter != null && chatAdapter.isFiltered ? filteredMessagesDict.get(mid) :  messagesDict[loadIndex].get(mid);
-
-            if (!AyuSavePreferences.saveDeletedMessageFor(currentAccount, getDialogId(), obj) || AyuState.isDeletePermitted(getDialogId(), mid)) {
-                AyuState.messageDeleted(getDialogId(), mid);
-            } else {
-                continue;
-            }
-
             if (selectedObject != null && obj == selectedObject || obj != null && selectedObjectGroup != null && selectedObjectGroup == groupedMessagesMap.get(obj.getGroupId())) {
                 closeMenu();
             }
@@ -31145,6 +31172,7 @@ public class ChatActivity extends BaseFragment implements
         return caption;
     }
 
+
     private boolean createMenu(View v, boolean single, boolean listView, float x, float y, boolean searchGroup, boolean longpress) {
         return createMenu(v, single, listView, x, y, searchGroup, longpress, false, false);
     }
@@ -34616,9 +34644,6 @@ public class ChatActivity extends BaseFragment implements
                             if (error == null) {
                                 TLRPC.Updates updates = (TLRPC.Updates) response;
                                 getMessagesController().processUpdates(updates, false);
-                                for (int i = 0; i < req.id.size(); i++) {
-                                    AyuState.permitDeleteMessage(dialog_id, req.id.get(i));
-                                }
                                 AndroidUtilities.runOnUIThread(() -> NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.messagesDeleted, req.id, getUserConfig().getClientUserId() == dialog_id ? 0 : -dialog_id, true, true));
                             } else if (error.text != null) {
                                 AndroidUtilities.runOnUIThread(() -> {
@@ -46528,7 +46553,7 @@ public class ChatActivity extends BaseFragment implements
 //                            options.add(OPTION_EDIT_PRICE);
 //                            icons.add(R.drawable.menu_feature_paid);
 //                        }
-                if (NekoConfig.showReport.Bool() && !isAyuDeleted && selectedObject.contentType == 0 && !selectedObject.isMediaEmptyWebpage() && selectedObject.getId() > 0 && !selectedObject.isOut() && (currentChat != null || currentUser != null && currentUser.bot)) {
+                if (NekoConfig.showReport.Bool() && selectedObject.contentType == 0 && !selectedObject.isMediaEmptyWebpage() && selectedObject.getId() > 0 && !selectedObject.isOut() && (currentChat != null || currentUser != null && currentUser.bot)) {
                     items.add(LocaleController.getString(R.string.ReportChat));
                     options.add(OPTION_REPORT_CHAT);
                     icons.add(R.drawable.msg_report);
@@ -46608,7 +46633,7 @@ public class ChatActivity extends BaseFragment implements
                         icons.add(R.drawable.menu_reply);
                     }
                 }
-                if (!noforwardsOrPaidMedia && !selectedObject.isSponsored() && selectedObject.contentType == 0 && chatMode == MODE_DEFAULT && !isInsideContainer && currentChat != null && currentUser == null && selectedObject.messageOwner.peer_id.user_id == 0 && selectedObject.messageOwner.from_id.user_id > 0 && selectedObject.messageOwner.from_id.user_id != getUserConfig().getClientUserId() && !isAyuDeleted) {
+                if (!noforwardsOrPaidMedia && !selectedObject.isSponsored() && selectedObject.contentType == 0 && chatMode == MODE_DEFAULT && !isInsideContainer && currentChat != null && currentUser == null && selectedObject.messageOwner.peer_id.user_id == 0 && selectedObject.messageOwner.from_id.user_id > 0 && selectedObject.messageOwner.from_id.user_id != getUserConfig().getClientUserId()) {
                     allowReplyPm = true;
                     if (NaConfig.INSTANCE.getShowReplyInPrivate().Bool()) {
                         items.add(LocaleController.getString(R.string.ReplyInPrivate));
@@ -46993,7 +47018,7 @@ public class ChatActivity extends BaseFragment implements
                         options.add(nkbtn_repeat);
                         icons.add(R.drawable.msg_repeat);
                     }
-                    if (allowRepeat && !isAyuDeleted && !selectedObject.needDrawBluredPreview() && (NaConfig.INSTANCE.getShowRepeatAsCopy().Bool() || (NekoConfig.showRepeat.Bool() && noforwards))){
+                    if (allowRepeat && !selectedObject.needDrawBluredPreview() && (NaConfig.INSTANCE.getShowRepeatAsCopy().Bool() || (NekoConfig.showRepeat.Bool() && noforwards))){
                         items.add(LocaleController.getString(R.string.RepeatAsCopy));
                         options.add(nkbtn_repeatascopy);
                         icons.add(R.drawable.msg_repeat);
@@ -47104,7 +47129,7 @@ public class ChatActivity extends BaseFragment implements
                         items.add(LocaleController.getString(R.string.BlockContact));
                         options.add(OPTION_REPORT_CHAT);
                         icons.add(R.drawable.msg_block2);
-                    } else if (NekoConfig.showReport.Bool() && !isAyuDeleted) {
+                    } else if (NekoConfig.showReport.Bool()) {
                         items.add(LocaleController.getString(R.string.ReportChat));
                         options.add(OPTION_REPORT_CHAT);
                         icons.add(R.drawable.msg_report);

@@ -25,8 +25,6 @@ import tw.nekomimi.nekogram.ui.icons.IconsResources;
 import xyz.nextalone.nagram.NaConfig;
 
 public class TimeStringHelper {
-    public static SpannableStringBuilder deletedSpan;
-    public static Drawable deletedDrawable;
     public static SpannableStringBuilder editedSpan;
     public static Drawable editedDrawable;
     public static SpannableStringBuilder channelLabelSpan;
@@ -63,10 +61,9 @@ public class TimeStringHelper {
 
         createSpan();
         SpannableStringBuilder spannableStringBuilder = new SpannableStringBuilder();
-
         spannableStringBuilder
                 .append(messageObject.messageOwner.post_author != null ? " " : "")
-                .append(NaConfig.INSTANCE.getUseDeletedIcon().Bool() ? deletedSpan : deletedStrFin)
+                .append(createBookmarkSpan(senderNameColor))
                 .append("  ")
                 .append(isEdited ? (NaConfig.INSTANCE.getUseEditedIcon().Bool() ? editedSpan : editedStrFin) : "")
                 .append(isEdited ? "  " : "")
@@ -162,14 +159,6 @@ public class TimeStringHelper {
         if (editedSpan == null) {
             editedSpan = new SpannableStringBuilder("\u200B");
             editedSpan.setSpan(new ColoredImageSpan(editedDrawable, true), 0, 1, 0);
-        }
-
-        if (deletedDrawable == null) {
-            deletedDrawable = Objects.requireNonNull(ContextCompat.getDrawable(ApplicationLoader.applicationContext, R.drawable.msg_delete_solar)).mutate();
-        }
-        if (deletedSpan == null) {
-            deletedSpan = new SpannableStringBuilder("\u200B");
-            deletedSpan.setSpan(new ColoredImageSpan(deletedDrawable, true), 0, 1, 0);
         }
 
         if (translatedDrawable == null) {

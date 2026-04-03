@@ -901,7 +901,7 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     public boolean isPremiumUser(TLRPC.User currentUser) {
-        return !premiumFeaturesBlocked() && (currentUser.premium || currentUser.id == getUserConfig().getClientUserId() && NekoConfig.localPremium.Bool()) && !isSupportUser(currentUser);
+        return !premiumFeaturesBlocked() && currentUser.premium && !isSupportUser(currentUser);
     }
 
     public boolean didPressTranscribeButtonEnough() {
@@ -8858,9 +8858,6 @@ public class MessagesController extends BaseController implements NotificationCe
                 }
                 loadingBlockedPeers = false;
                 getNotificationCenter().postNotificationName(NotificationCenter.blockedUsersDidLoad);
-                if (!reset && !blockedEndReached && NekoConfig.ignoreBlocked.Bool()) {
-                    getBlockedPeers(false);
-                }
             }
         }));
     }
@@ -9402,11 +9399,6 @@ public class MessagesController extends BaseController implements NotificationCe
             return;
         }
 
-       // nax: do not send request if deleting ayuDeleted messages
-        if (messages != null && messages.size() == ayuDeletedMessagesCount) {
-            return;
-        }
-
         long newTaskId;
         if (scheduled) {
             TLRPC.TL_messages_deleteScheduledMessages req;
@@ -9821,9 +9813,6 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     protected void deleteDialog(long did, int first, int onlyHistory, int max_id, boolean revoke, TLRPC.InputPeer peer, long taskId) {
-        if (onlyHistory == 3 && NaConfig.INSTANCE.getEnableSaveDeletedMessages().Bool()) {
-            return;
-        }
         if (onlyHistory == 2) {
             if (did == getUserConfig().getClientUserId()) {
                 getSavedMessagesController().deleteAllDialogs();
@@ -11168,6 +11157,7 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     public boolean sendTyping(long dialogId, long threadMsgId, int action, String emojicon, int classGuid) {
+        if (NekoConfig.disableChatAction.Bool()) return false;
         if (action < 0 || action >= sendingTypings.length || dialogId == 0) {
             return false;
         }
@@ -20736,7 +20726,7 @@ public class MessagesController extends BaseController implements NotificationCe
 
     public SponsoredMessagesInfo getSponsoredMessages(long dialogId) {
         // na: disable ad
-        if (true) {
+        if (!NaConfig.INSTANCE.getShowAds().Bool()) {
             return null;
         }
         SponsoredMessagesInfo info = sponsoredMessages.get(dialogId);
